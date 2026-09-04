@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GBC ANALYST v3 — تحلیلگر طلایی/بیت‌کوین (تک‌فایل، خروجی فارسی، لاگ کامل)
-=========================================================================
-Usage:
-  python gbc_analyst.py --full | --quick | --auto | --test-notify
-Log: state/logs/last_run.log  (در ریپو ذخیره می‌شود)
+GBC ANALYST v3.1 — تحلیلگر طلایی/بیت‌کوین (تک‌فایل، فارسی، لاگ کامل، تیکرهای اصلاح‌شده)
+Usage: python gbc_analyst.py --full | --quick | --auto | --test-notify
+Log:   state/logs/last_run.log
 """
 
 import os, re, sys, json, csv, time, html, hashlib, logging, traceback
@@ -45,6 +43,9 @@ class _CountFilter(logging.Filter):
 
 def setup_logging():
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    # ساکت‌کردن لاگ‌های پرحرف کتابخانه‌ها
+    for noisy in ("yfinance", "peewee", "urllib3", "multiprocessing"):
+        logging.getLogger(noisy).setLevel(logging.CRITICAL)
     log.setLevel(logging.DEBUG)
     log.handlers.clear()
     fmt = logging.Formatter("%(asctime)s.%(msecs)03d %(levelname)-5s %(message)s", "%H:%M:%S")
@@ -92,22 +93,25 @@ def retry(fn, tries=3, wait=2, name="?"):
     raise last
 
 # ======================================================================
-# 2. CONFIG
+# 2. CONFIG  (تمام مقادیر env با strip — فاصله/اینتر اضافه حذف می‌شود)
 # ======================================================================
+def _e(key, default=""):
+    return (os.getenv(key) or "").strip() or default
+
 def _env_models():
     default = ("gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite,"
                "gemini-2.5-flash,gemini-2.0-flash")
-    return [m.strip() for m in os.getenv("GEMINI_MODELS", default).split(",") if m.strip()]
+    return [m.strip() for m in _e("GEMINI_MODELS", default).split(",") if m.strip()]
 
 CFG = {
-    "TELEGRAM_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN", ""),
-    "TELEGRAM_CHAT":  os.getenv("TELEGRAM_CHAT_ID", ""),
-    "FRED_KEY":       os.getenv("FRED_API_KEY", ""),
-    "GEMINI_KEY":     os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", ""),
+    "TELEGRAM_TOKEN": _e("TELEGRAM_BOT_TOKEN"),
+    "TELEGRAM_CHAT":  _e("TELEGRAM_CHAT_ID"),
+    "FRED_KEY":       _e("FRED_API_KEY"),
+    "GEMINI_KEY":     _e("GEMINI_API_KEY") or _e("GOOGLE_API_KEY"),
     "GEMINI_MODELS":  _env_models(),
-    "CRYPTOPANIC_TOKEN": os.getenv("CRYPTOPANIC_TOKEN", ""),
-    "STATE_DIR":      os.getenv("STATE_DIR", "state"),
-    "NOTIFY":         os.getenv("NOTIFY", "1") == "1",
+    "CRYPTOPANIC_TOKEN": _e("CRYPTOPANIC_TOKEN"),
+    "STATE_DIR":      _e("STATE_DIR", "state"),
+    "NOTIFY":         _e("NOTIFY", "1") == "1",
     "WEIGHTS": {"technical": 1.0, "nds": 1.2, "nds_w": 0.8, "correlation": 0.8,
                 "macro": 1.5, "sentiment": 0.9, "ai_events": 1.8, "iran_local": 1.6},
     "MIN_CONF": 40, "MAX_CONF": 92,
@@ -171,10 +175,25 @@ TIMING_FA = {"next 24-72h": "۲۴ تا ۷۲ ساعت آینده", "this week": "
              "next week": "هفتهٔ بعد", "ongoing": "در جریان", "unknown": ""}
 
 # ======================================================================
-# 4. DATA — GLOBAL MARKETS
+# 4. DATA — GLOBAL MARKETS (نگاشت درست تیکرها + زنجیرهٔ جایگزین)
 # ======================================================================
+CHAINS = {
+    "XAUUSD": ["XAUUSD=X", "GC=F", "GLD"],
+    "BTC":    ["BTC-USD", "BTC=F"],
+    "DXY":    ["DX-Y.NYB", "DX=F"],
+    "US10Y":  ["^TNX"],
+    "OIL":    ["CL=F", "BZ=F"],
+    "SPX":    ["^GSPC", "SPY"],
+    "VIX":    ["^VIX"],
+}
+# ^TNX بازده×10 است → برای نمایش درصد واقعی ÷10 می‌کنیم
+SCALE = {"US10Y": 0.10}
+# چک سلامت قیمت: اگر قیمت کمتر از این باشد، داده قطعاً غلط است
+SANITY_MIN = {"XAUUSD": 100, "BTC": 1000, "DXY": 50, "US10Y": 0.1,
+              "OIL": 5, "SPX": 500, "VIX": 5}
+
 def fetch_history(sym, period="2y"):
-    chain = {"XAUUSD": ["XAUUSD=X", "GC=F", "GLD"]}.get(sym, [sym])
+    chain = CHAINS.get(sym, [sym])
     last_err = None
     for t in chain:
         try:
@@ -185,17 +204,26 @@ def fetch_history(sym, period="2y"):
             df = df.dropna()
             if df.empty:
                 last_err = f"{t}: empty"; continue
+            last_px = float(df["Close"].iloc[-1])
+            mn = SANITY_MIN.get(sym)
+            if mn is not None and last_px < mn:
+                last_err = (f"{t}: sanity fail — price {last_px} < min {mn} "
+                            f"(probably wrong asset)"); continue
             if t == "GLD":
-                scale = 2400.0 / float(df["Close"].iloc[-1])
-                df = df * scale
-                log.warning(f"[yf] {sym} via GLD scaled x{scale:.1f} (fallback)")
-            log.debug(f"[yf] {sym} <- {t}: {len(df)} rows, last={float(df['Close'].iloc[-1]):.2f}")
+                sc = 2400.0 / last_px
+                df = df * sc
+                log.warning(f"[yf] {sym} via GLD scaled x{sc:.1f} (fallback)")
+                last_px = float(df["Close"].iloc[-1])
+            if sym in SCALE:
+                df = df * SCALE[sym]
+                last_px = float(df["Close"].iloc[-1])
+            log.debug(f"[yf] {sym} <- {t}: {len(df)} rows, last={last_px:,.2f}")
             src("yfinance", True)
             return df, t
         except Exception as e:
             last_err = e
     src("yfinance", False, f"{sym}: {last_err}")
-    raise last_err or RuntimeError(f"no data for {sym}")
+    raise RuntimeError(f"{sym}: all ticker sources failed — last error: {last_err}")
 
 def _chg(c, n):
     try:
@@ -221,7 +249,6 @@ def global_snapshots():
     return snaps, frames
 
 def gold_spot_fallback():
-    """اسپات واقعی طلا برای محاسبهٔ ارزش تئوریک طلای ایران (فیوچرز ۱-۲٪ گران‌تر است)."""
     try:
         df = yf.download("XAUUSD=X", period="5d", interval="1d", auto_adjust=True,
                          progress=False, threads=False)
@@ -234,13 +261,28 @@ def gold_spot_fallback():
         log.debug(f"[yf] XAUUSD=X spot failed: {e}")
     return None
 
+def sanity_checks(g, ir):
+    prob = []
+    btc = g.get("BTC", {}).get("price")
+    if btc is not None and btc < SANITY_MIN["BTC"]:
+        prob.append(f"قیمت بیت‌کوین مشکوک است: {btc} (احتمالاً تیکر اشتباه)")
+    xau = g.get("XAUUSD", {}).get("price")
+    if xau is not None and xau < SANITY_MIN["XAUUSD"]:
+        prob.append(f"قیمت طلا مشکوک است: {xau}")
+    usd = ir.get("usdirr_free")
+    if usd is not None and usd < 10000:
+        prob.append(f"دلار آزاد مشکوک است: {usd}")
+    for p in prob:
+        log.error("[sanity] " + p)
+    if not prob:
+        log.info("[sanity] all key prices look reasonable ✔")
+    return prob
+
 # ======================================================================
-# 5. DATA — IRAN (TGJU + Nobitex)
+# 5. DATA — IRAN (TGJU + Nobitex با جایگزین Wallex)
 # ======================================================================
 TGJU_URL = "https://api.tgju.org/v1/market/indicator/summary-table-data/{code}"
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
-TGJU_CODES = {"price_dollar_rl": "dollar", "geram18": "gold18", "geram24": "gold24",
-              "sekee": "emami", "nim": "half", "rob": "quarter"}
 
 def tgju_one(code):
     def _g():
@@ -260,13 +302,30 @@ def nobitex():
         return float(s["usdt-irt"]["latest"]) * 10, float(s["btc-irt"]["latest"]) * 10
     return retry(_g, tries=2, wait=1, name="nobitex")
 
+def wallex():
+    """جایگزین نوبیتکس — قیمت تتر و بیت‌کوین تومانی از والکس"""
+    def _g():
+        r = requests.get("https://api.wallex.ir/v1/markets", headers=UA, timeout=15)
+        r.raise_for_status()
+        mk = r.json().get("result", {}).get("markets", {})
+        def last(key):
+            for k, v in mk.items():
+                if str(k).upper() == key:
+                    return float(v["stats"]["lastPrice"]) * 10  # تومان → ریال
+            return None
+        usdt, btc = last("USDTTM"), last("BTCTMN")
+        if usdt is None:
+            raise RuntimeError("USDTTM not found in wallex response")
+        return usdt, btc
+    return retry(_g, tries=2, wait=1, name="wallex")
+
 def iran_snapshot(xau_main):
     snap = {"usdirr_free": None, "geram18_rial": None, "geram24_rial": None,
             "emami_rial": None, "nim_rial": None, "rob_rial": None,
             "usdt_irt_rial": None, "btc_irt_rial": None,
             "geram18_implied_rial": None, "geram18_premium_pct": None,
             "sekee_bubble_pct": None, "usdt_premium_pct": None,
-            "btc_ir_premium_pct": None, "spot_used": None}
+            "btc_ir_premium_pct": None, "spot_used": None, "crypto_src": None}
     # --- TGJU ---
     got = 0
     for code, key in (("price_dollar_rl", "usdirr_free"), ("geram18", "geram18_rial"),
@@ -276,25 +335,33 @@ def iran_snapshot(xau_main):
             v = tgju_one(code)
             snap[key] = v
             got += (v is not None)
-            src("tgju", v is not None, f"{code}=None")
+            if v is not None: src("tgju", True)
         except Exception as e:
             src("tgju", False, f"{code}: {e}")
     log.info(f"[data] tgju ok={got}/6 dollar={snap['usdirr_free']} "
              f"g18={snap['geram18_rial']} sekee={snap['emami_rial']}")
-    # --- Nobitex ---
+    # --- Nobitex → Wallex ---
     try:
         usdt, btc = nobitex()
         snap["usdt_irt_rial"], snap["btc_irt_rial"] = usdt, btc
+        snap["crypto_src"] = "nobitex"
         src("nobitex", True)
         log.info(f"[data] nobitex usdt={usdt:,.0f}R btc={btc:,.0f}R")
-    except Exception as e:
-        src("nobitex", False, e)
+    except Exception as e1:
+        src("nobitex", False, e1)
+        try:
+            usdt, btc = wallex()
+            snap["usdt_irt_rial"], snap["btc_irt_rial"] = usdt, btc
+            snap["crypto_src"] = "wallex"
+            src("wallex", True)
+            log.info(f"[data] wallex(fallback) usdt={usdt:,.0f}R btc={btc:,.0f}R")
+        except Exception as e2:
+            src("wallex", False, e2)
     # --- dollar fallback via USDT ---
     if not snap["usdirr_free"] and snap["usdt_irt_rial"]:
         snap["usdirr_free"] = round(snap["usdt_irt_rial"] * 0.985)
-        log.warning("[data] dollar missing -> USDT proxy used "
-                    f"({snap['usdirr_free']:,.0f}R)")
-    # --- implied & premia (spot-based) ---
+        log.warning(f"[data] dollar missing -> USDT proxy ({snap['usdirr_free']:,.0f}R)")
+    # --- implied & premia ---
     spot, where = gold_spot_fallback(), "XAUUSD=X"
     if spot is None:
         spot, where = xau_main, "main-chain"
@@ -305,15 +372,12 @@ def iran_snapshot(xau_main):
         snap["geram18_implied_rial"] = implied
         snap["geram18_premium_pct"] = (g18 / implied - 1.0) * 100
     if snap["emami_rial"] and g18:
-        # سکه امامی = 8.133 گرم طلای ۹۰۰ عیار ≈ 9.76 گرم طلای ۱۸ عیار
         snap["sekee_bubble_pct"] = (snap["emami_rial"] / (g18 * 9.76) - 1.0) * 100
     if snap["usdt_irt_rial"] and usd:
         snap["usdt_premium_pct"] = (snap["usdt_irt_rial"] / usd - 1.0) * 100
-    if snap["btc_irt_rial"] and usd and xau_main:
-        pass  # btc premium needs btc_usd — set by caller
     log.info(f"[data] premium18={snap['geram18_premium_pct']} "
              f"bubble_sekee={snap['sekee_bubble_pct']} "
-             f"usdt_prem={snap['usdt_premium_pct']} spot={where}")
+             f"usdt_prem={snap['usdt_premium_pct']} spot={where} crypto={snap['crypto_src']}")
     return snap
 
 def set_btc_ir_premium(snap, btc_usd):
@@ -322,7 +386,7 @@ def set_btc_ir_premium(snap, btc_usd):
                                       (btc_usd * snap["usdirr_free"]) - 1.0) * 100
 
 # ======================================================================
-# 6. DATA — MACRO (FRED)
+# 6. DATA — MACRO (FRED) با پیام راهنما برای خطای کلید
 # ======================================================================
 FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
 
@@ -336,10 +400,18 @@ def fred_series(sid, limit=400):
     obs.reverse()
     return obs
 
+def _fred_err_hint(e):
+    s = str(e)
+    if "400" in s:
+        return s + " ← کلید FRED نامعتبر است (فاصله/کاراکتر اضافه یا کلید غلط)"
+    if "403" in s:
+        return s + " ← کلید FRED هنوز فعال نشده (ایمیل تایید را چک کن)"
+    return s
+
 def macro_snapshot():
     out = {}
     if not CFG["FRED_KEY"]:
-        log.warning("[fred] no API key — macro skipped")
+        log.warning("[fred] no API key — macro skipped (سکرت FRED_API_KEY را بساز)")
         src("fred", False, "no key")
         return out
     try:
@@ -350,28 +422,31 @@ def macro_snapshot():
             out["real10y"] = d10[-1][1] - bie[-1][1]
             out["real10y_chg_5d"] = out["real10y"] - (d10[-6][1] - bie[-6][1])
         src("fred", True)
-        log.info(f"[data] fred 10y={out['us10y']} real={out.get('real10y')}")
+        log.info(f"[data] fred 10y={out['us10y']}% real={out.get('real10y')}")
     except Exception as e:
-        src("fred", False, f"yields: {e}")
+        src("fred", False, "yields: " + _fred_err_hint(e))
     try:
         cpi = fred_series("CPIAUCSL", 60)
         if len(cpi) >= 13: out["cpi_yoy"] = (cpi[-1][1] / cpi[-13][1] - 1) * 100
+        src("fred", True)
     except Exception as e:
-        src("fred", False, f"cpi: {e}")
+        src("fred", False, "cpi: " + _fred_err_hint(e))
     try:
         walcl = fred_series("WALCL", 12)
         out["fed_bs_chg_4w_pct"] = (walcl[-1][1] / walcl[-5][1] - 1) * 100
+        src("fred", True)
     except Exception as e:
-        src("fred", False, f"walcl: {e}")
+        src("fred", False, "walcl: " + _fred_err_hint(e))
     try:
         m2 = fred_series("M2SL", 30)
         if len(m2) >= 13: out["m2_yoy"] = (m2[-1][1] / m2[-13][1] - 1) * 100
+        src("fred", True)
     except Exception as e:
-        src("fred", False, f"m2: {e}")
+        src("fred", False, "m2: " + _fred_err_hint(e))
     return out
 
 # ======================================================================
-# 7. DATA — NEWS (شامل سخنرانی‌ها و رویدادهای مهم)
+# 7. DATA — NEWS
 # ======================================================================
 QUERIES = ["gold price", "bitcoin price", "federal reserve rate decision",
            "Powell speech Fed", "FOMC minutes meeting", "US inflation CPI report",
@@ -432,7 +507,7 @@ def collect_news():
     try:
         items += gdelt(); src("gdelt", True)
     except Exception as e:
-        src("gdelt", False, e)
+        src("gdelt", False, e)   # 429 = محدودیت نرخ؛ بی‌خطر چون Google News پوشش می‌دهد
     items += cryptopanic()
     seen, uniq = set(), []
     for it in items:
@@ -443,7 +518,6 @@ def collect_news():
         src("google_news", False, f"{fails}/{len(QUERIES)} queries empty")
     return uniq[:70]
 
-# --- تشخیص خبر/سخنرانی مهم برای هشدار فوری ---
 WHO_RX = re.compile(r"(powell|fomc|federal reserve|fed chair|lagarde|ecb|boj|boe|"
                     r"central bank|treasury secretary|yellen)", re.I)
 WHAT_RX = re.compile(r"(speech|testimon|press conference|hearing|remarks|decision|"
@@ -457,7 +531,7 @@ HOTWORDS = ("sanction", "strike", "attack", "missile", "drone", "war", "nuclear"
 def is_hot(title):
     t = title.lower()
     if any(k in t for k in HOTWORDS): return True
-    if WHO_RX.search(t) and WHAT_RX.search(t): return True   # سخنرانی/شهادت رئیس فد
+    if WHO_RX.search(t) and WHAT_RX.search(t): return True
     return False
 
 # ======================================================================
@@ -495,20 +569,19 @@ def bollinger_pb(c, n=20, k=2.0):
     return float(((c - dn) / rng).iloc[-1])
 
 # ======================================================================
-# 9. ANALYSIS — TECHNICAL (فارسی ساده)
+# 9. ANALYSIS — TECHNICAL
 # ======================================================================
 def technical_block(df):
     c = df["Close"].squeeze()
     e200 = float(ema(c, 200).iloc[-1]) if len(c) >= 200 else None
     h = macd_hist(c)
-    t = {"close": float(c.iloc[-1]),
-         "ema20": float(ema(c, 20).iloc[-1]), "ema50": float(ema(c, 50).iloc[-1]),
-         "ema200": e200, "rsi": float(rsi(c).iloc[-1]),
-         "atr_pct": float((atr_series(df, 14) / c * 100).iloc[-1]),
-         "atr_pctile": atr_pctile_now(df),
-         "macd_hist": float(h.iloc[-1]), "macd_hist_prev": float(h.iloc[-2]),
-         "bb_pb": bollinger_pb(c)}
-    return t
+    return {"close": float(c.iloc[-1]),
+            "ema20": float(ema(c, 20).iloc[-1]), "ema50": float(ema(c, 50).iloc[-1]),
+            "ema200": e200, "rsi": float(rsi(c).iloc[-1]),
+            "atr_pct": float((atr_series(df, 14) / c * 100).iloc[-1]),
+            "atr_pctile": atr_pctile_now(df),
+            "macd_hist": float(h.iloc[-1]), "macd_hist_prev": float(h.iloc[-2]),
+            "bb_pb": bollinger_pb(c)}
 
 def technical_signals(asset, t):
     out, stack = [], 0.0
@@ -547,7 +620,7 @@ def technical_signals(asset, t):
     return out
 
 # ======================================================================
-# 10. ANALYSIS — NDS / STRUCTURE (روزانه + هفتگی)
+# 10. ANALYSIS — NDS / STRUCTURE
 # ======================================================================
 SEQ_FA = {
     "higher highs + higher lows (uptrend structure)":
@@ -628,7 +701,7 @@ def resample_weekly(df):
     return pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": cl}).dropna()
 
 # ======================================================================
-# 11. ANALYSIS — CORRELATION / MACRO / SENTIMENT
+# 11. CORRELATION / MACRO / SENTIMENT
 # ======================================================================
 def correlation_signals(frames):
     closes = {}
@@ -731,7 +804,7 @@ def sentiment_signals(items, fng=None):
     return out
 
 # ======================================================================
-# 12. ANALYSIS — IRAN MODELS
+# 12. IRAN MODELS
 # ======================================================================
 def usdirr_momentum(rows):
     vals = [float(r["usdirr_free"]) for r in rows
@@ -768,7 +841,6 @@ def iran_gold_signals(snap, rows, ai_usdirr, xau_nds, xau_chg7):
     usd = snap.get("usdirr_free")
     mom, nhist = usdirr_momentum(rows)
     mom_pct = mom * 100
-    # 1) مومنتوم چندبازه‌ای دلار — مهم‌ترین سیگنال
     if usd:
         s = max(-1.0, min(1.0, mom * 40))
         if s > 0.1:
@@ -781,7 +853,6 @@ def iran_gold_signals(snap, rows, ai_usdirr, xau_nds, xau_chg7):
             why = (f"دلار آزاد {fmt(usd)} ریال است و تقریباً ثابت مانده — موتور اصلی "
                    f"حرکت طلای داخل فعلاً خاموش است.")
         out.append(sig("iran_local", "GOLD_IR", s, 0.8, why, w=1.6))
-    # 2) پریمیوم تتر = تقاضای واقعی دلار (لحظه‌ای)
     uprem = snap.get("usdt_premium_pct")
     if uprem is not None:
         if uprem > -0.5:
@@ -790,14 +861,12 @@ def iran_gold_signals(snap, rows, ai_usdirr, xau_nds, xau_chg7):
         elif uprem < -2.5:
             out.append(sig("iran_local", "GOLD_IR", -0.3, 0.4,
                            f"تتر با دیسکانت {uprem:+.1f}٪ معامله می‌شود — تقاضای دلار ضعیف است."))
-    # 3) مومنتوم سکه
     cmom = coin_momentum(rows)
     if cmom is not None:
         cpct = cmom * 100
         out.append(sig("iran_local", "GOLD_IR", max(-1.0, min(1.0, cmom * 25)), 0.6,
                        f"سکهٔ امامی در ~۵ روز {cpct:+.1f}٪ تغییر کرده — "
                        f"{'حرارت بازار داخلی' if cmom > 0 else 'سردی بازار داخلی'} را نشان می‌دهد."))
-    # 4) حباب سکه
     bub = snap.get("sekee_bubble_pct")
     if bub is not None:
         if bub > 15:
@@ -806,15 +875,12 @@ def iran_gold_signals(snap, rows, ai_usdirr, xau_nds, xau_chg7):
                            f"و احتمال سرد شدن دارد."))
         elif bub < 6:
             out.append(sig("iran_local", "GOLD_IR", 0.3, 0.5,
-                           f"حباب سکه فقط {bub:+.1f}٪ است — سکه به قیمت طلای خودش نزدیک است "
-                           f"(فضای رشد احساسی کم، ولی ریسک پایین‌تر)."))
-    # 5) گذر طلای جهانی (اسپات + مومنتوم)
+                           f"حباب سکه فقط {bub:+.1f}٪ است — سکه به قیمت طلای خودش نزدیک است."))
     xs = (xau_nds or 0) * 0.5 + max(-1.0, min(1.0, (xau_chg7 or 0) * 10)) * 0.5
     if xs:
         out.append(sig("iran_local", "GOLD_IR", xs * 0.6, 0.6,
                        "طلای جهانی روند " + ("صعودی" if xs > 0 else "نزولی") +
                        " دارد و بخشی از آن به قیمت داخل منتقل می‌شود.", w=1.2))
-    # 6) پریمیوم ۱۸ عیار
     prem = snap.get("geram18_premium_pct")
     if prem is not None and nhist >= 20:
         hist = [float(r["geram18_premium_pct"]) for r in rows
@@ -835,7 +901,6 @@ def iran_gold_signals(snap, rows, ai_usdirr, xau_nds, xau_chg7):
         out.append(sig("iran_local", "GOLD_IR", 0, 0.4,
                        f"طلای داخل حدود {abs(prem):.1f}٪ {side} از ارزش واقعی‌اش است "
                        f"(ارزش واقعی از اسپات جهانی محاسبه شد، نه فیوچرز)."))
-    # 7) اخبار ایران (Gemini)
     if abs(ai_usdirr) > 0.15:
         out.append(sig("ai_events", "GOLD_IR", ai_usdirr, 0.7,
                        "بررسی اخبار مهم (تحریم، تنش، سیاست داخلی) فشار فضای خبری را " +
@@ -875,7 +940,7 @@ Classify each headline. Return ONLY JSON:
 
 Rules:
 - impact=high ONLY if it can move gold/BTC/USD-IRR by more than 1-2% within 24-72h.
-- impact=structural for long-term regime shifts (e.g., central banks accelerating gold buying).
+- impact=structural for long-term regime shifts.
 - impact=noise for routine chatter and opinion pieces.
 - Central-bank speeches/testimony/FOMC/CPI scheduling are important — do not mark them noise.
 - usdirr: +1 means news pressures USD/IRR UP (rial weakens -> Iranian gold/coin tend UP).
@@ -894,8 +959,14 @@ SAFETY = [{"category": f"HARM_CATEGORY_{c}", "threshold": "BLOCK_ONLY_HIGH"}
 
 def gemini_chat(system, user, max_tokens=4096, json_mode=True):
     if not CFG["GEMINI_KEY"] or not CFG["GEMINI_MODELS"]:
-        DIAG["llm"] = {"ok": False, "err": "no key/models"}
-        log.warning("[gemini] skipped — no key or model list")
+        miss = []
+        if not CFG["GEMINI_KEY"]:
+            miss.append("GEMINI_API_KEY خالی است → Settings > Secrets and variables > Actions "
+                        "→ New repository secret با نام GEMINI_API_KEY و کلید AIza... از aistudio.google.com/apikey")
+        if not CFG["GEMINI_MODELS"]:
+            miss.append("GEMINI_MODELS خالی است")
+        DIAG["llm"] = {"ok": False, "err": "; ".join(miss)}
+        log.warning("[gemini] SKIP — " + " | ".join(miss))
         return ""
     models = CFG["GEMINI_MODELS"]
     start = jload(P_GEM, {}).get("idx", 0) % len(models)
@@ -1007,7 +1078,7 @@ def gemini_plain(preds):
         return {}
 
 # ======================================================================
-# 14. DECISION ENGINE (با سقف اطمینان بر اساس کیفیت داده)
+# 14. DECISION ENGINE
 # ======================================================================
 def adapted_weights():
     W = dict(CFG["WEIGHTS"])
@@ -1115,7 +1186,7 @@ def register_predictions(preds):
     jsave(P_GRADE, g)
 
 # ======================================================================
-# 16. TELEGRAM (فارسی)
+# 16. TELEGRAM
 # ======================================================================
 def _chunks(t, n):
     while t:
@@ -1205,28 +1276,28 @@ def iran_prices_block(snap, g, prev_row):
             pass
         return None
     L = ["", "<b>💱 قیمت‌های لحظه‌ای بازار ایران</b>"]
-    items = [("دلار آزاد", "usdirr_free", 1, "ریال"),
-             ("طلای ۱۸ عیار", "geram18_rial", 1, "ریال"),
-             ("طلای ۲۴ عیار", "geram24_rial", 1, "ریال"),
-             ("سکهٔ امامی", "emami_rial", 1, "ریال"),
-             ("نیم‌سکه", "nim_rial", 1, "ریال"),
-             ("ربع‌سکه", "rob_rial", 1, "ریال")]
+    items = [("دلار آزاد", "usdirr_free", "ریال"),
+             ("طلای ۱۸ عیار", "geram18_rial", "ریال"),
+             ("طلای ۲۴ عیار", "geram24_rial", "ریال"),
+             ("سکهٔ امامی", "emami_rial", "ریال"),
+             ("نیم‌سکه", "nim_rial", "ریال"),
+             ("ربع‌سکه", "rob_rial", "ریال")]
     any_price = False
-    for name, key, div, unit in items:
+    for name, key, unit in items:
         v = snap.get(key)
         if not v: continue
         any_price = True
-        s = f"• {name}: <b>{fmt(v / div)}</b> {unit}"
+        s = f"• {name}: <b>{fmt(v)}</b> {unit}"
         c = chg(key)
         if c is not None: s += f" ({c:+.1f}٪)"
         L.append(s)
     if snap.get("usdt_irt_rial"):
-        s = f"• تتر (نوبیتکس): <b>{fmt(snap['usdt_irt_rial'] / 10)}</b> تومان"
+        s = f"• تتر: <b>{fmt(snap['usdt_irt_rial'] / 10)}</b> تومان"
         if snap.get("usdt_premium_pct") is not None:
             s += f" (پریمیوم {snap['usdt_premium_pct']:+.1f}٪ نسبت به دلار)"
         L.append(s); any_price = True
     if snap.get("btc_irt_rial"):
-        s = f"• بیت‌کوین (نوبیتکس): <b>{fmt(snap['btc_irt_rial'] / 10)}</b> تومان"
+        s = f"• بیت‌کوین: <b>{fmt(snap['btc_irt_rial'] / 10)}</b> تومان"
         if snap.get("btc_ir_premium_pct") is not None:
             s += f" (اختلاف با جهانی: {snap['btc_ir_premium_pct']:+.1f}٪)"
         L.append(s); any_price = True
@@ -1345,6 +1416,8 @@ def full():
             for r in reversed(rows):
                 if r["date"] < today: prev_row = r; break
 
+        sanity_checks(g, ir)
+
         with step("مکرو (FRED)"):
             mac = macro_snapshot()
 
@@ -1355,7 +1428,6 @@ def full():
             log.info(f"[intel] {'cached' if reused else 'fresh'}; "
                      f"ok={intel.get('ok')} changed={intel.get('changed')}")
 
-        # ---------- deterministic analysis ----------
         signals = {"XAUUSD": [], "GOLD_IR": [], "BTC": []}
         tech = {}
         with step("تحلیل تکنیکال و ساختار"):
@@ -1376,7 +1448,7 @@ def full():
                     t["supports"], t["resistances"] = sup, res
                     log.info(f"[tech] {a} close={t['close']:,.2f} rsi={t['rsi']:.1f} "
                              f"bb%b={t['bb_pb']:.2f} atr_pctile={t['atr_pctile']:.0f} "
-                             f"sup={[round(s,1) for s in sup]} res={[round(r,1) for r in res]}")
+                             f"sup={[round(s, 1) for s in sup]} res={[round(r, 1) for r in res]}")
                     if a == "XAUUSD": ir["xau_nds"] = sb["score"]
                 except Exception as e:
                     log.error(f"[analysis] {a} failed: {e}")
@@ -1403,7 +1475,6 @@ def full():
             log.info(f"[signals] counts: XAUUSD={len(signals['XAUUSD'])} "
                      f"GOLD_IR={len(signals['GOLD_IR'])} BTC={len(signals['BTC'])}")
 
-        # ---------- grade, predict ----------
         prices_now = {"XAUUSD": xau, "BTC": btc_usd, "GOLD_IR": ir.get("geram18_rial")}
         grade_and_adapt(prices_now)
         preds = {}
@@ -1428,7 +1499,6 @@ def full():
         with step("خلاصهٔ سادهٔ Gemini"):
             plain = gemini_plain(preds)
 
-        # ---------- alerts ----------
         for a, p in preds.items():
             o = st.get("preds", {}).get(a)
             if o and (o["direction"] != p["direction"] or abs(o["confidence"] - p["confidence"]) >= 15):
@@ -1447,7 +1517,6 @@ def full():
             names = "; ".join(e.get("name", "") for e in intel["high"][:3])
             send_alert("روایت خبری بازار عوض شد:\n" + esc(names), kind="narrative", cooldown_h=6)
 
-        # ---------- weekly view ----------
         weekly = {}
         for a, label in (("XAUUSD", "طلای جهانی"), ("BTC", "بیت‌کوین"), ("GOLD_IR", "طلای ایران")):
             w = [s for s in signals[a] if s["horizon"] == "weekly" or
@@ -1462,7 +1531,6 @@ def full():
         with step("ارسال گزارش تلگرام"):
             send_daily_report(preds, intel, weekly, plain, prices_block, macro_block)
 
-        # ---------- persist ----------
         st.update({"preds": preds, "digest": intel.get("digest", ""),
                    "intel": {k: intel.get(k) for k in ("scores", "digest", "changed", "high",
                                                        "invalidations", "ids_hash", "fetched", "ok")},
@@ -1486,7 +1554,6 @@ def full():
                         "sekee_bubble_pct": ir.get("sekee_bubble_pct")})
         register_predictions(preds)
         write_policy(prev_snap, g, ir, intel)
-        # ---------- SUMMARY ----------
         log.info("════ SUMMARY ════")
         for a, p in preds.items():
             log.info(f"  {a}: {p['direction'].upper()} conf={p['confidence']}% risk={p['risk']}")
