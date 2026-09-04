@@ -32,6 +32,39 @@
         "sentiment",
         "technical"
       ]
+    },
+    {
+      "asset": "GOLD_IR",
+      "direction": "neutral",
+      "entry_price": 228348000.0,
+      "valid_until": "2026-09-09T11:02:41+00:00",
+      "modules": [
+        "iran_local"
+      ]
+    },
+    {
+      "asset": "XAUUSD",
+      "direction": "neutral",
+      "entry_price": 4521.0,
+      "valid_until": "2026-09-09T11:02:41+00:00",
+      "modules": [
+        "correlation",
+        "nds",
+        "sentiment",
+        "technical"
+      ]
+    },
+    {
+      "asset": "BTC",
+      "direction": "bullish",
+      "entry_price": 81101.5390625,
+      "valid_until": "2026-09-09T11:02:41+00:00",
+      "modules": [
+        "correlation",
+        "nds",
+        "sentiment",
+        "technical"
+      ]
     }
   ],
   "module_stats": {}

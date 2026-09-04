@@ -3,14 +3,14 @@
     "GOLD_IR": {
       "asset": "GOLD_IR",
       "direction": "neutral",
-      "net": 0.039,
+      "net": 0.041,
       "confidence": 42,
       "risk": "low",
       "horizon": "2-7d",
       "reasons": [
         "Global gold trend partially passes through to local prices after currency conversion.",
         "Free-market USD/IRR at 2,202,600 rial is flat (+0.00% over ~5 days) — the single biggest driver of Iranian gold prices.",
-        "Local premium vs implied value: -4.8% (needs ~3 more weeks of history for a z-score)."
+        "Local premium vs implied value: -4.9% (needs ~3 more weeks of history for a z-score)."
       ],
       "buy_zones": [],
       "sell_zones": [],
@@ -19,8 +19,8 @@
       "invalidations": [],
       "invalidation_levels": [],
       "entry_price": 228348000.0,
-      "created": "2026-09-04T10:50:44+00:00",
-      "valid_until": "2026-09-09T10:50:44+00:00",
+      "created": "2026-09-04T11:02:41+00:00",
+      "valid_until": "2026-09-09T11:02:41+00:00",
       "modules": [
         "iran_local"
       ]
@@ -28,23 +28,23 @@
     "XAUUSD": {
       "asset": "XAUUSD",
       "direction": "neutral",
-      "net": 0.111,
+      "net": 0.12,
       "confidence": 44,
       "risk": "low",
       "horizon": "2-7d",
       "reasons": [
-        "Price 4,516.30 sits above its main moving averages (4,434.25/4,353.92/4,349.69) — trend is up.",
+        "Price 4,521.00 sits above its main moving averages (4,434.69/4,354.10/4,349.74) — trend is up.",
         "MACD momentum is negative and rising.",
-        "RSI(14) = 58.3 — balanced momentum.",
+        "RSI(14) = 58.5 — balanced momentum.",
         "Market structure: higher highs + higher lows (uptrend structure). Last displacement leg is 1.9× the average daily range (strong).",
-        "News headline sentiment across 60 recent stories is negative."
+        "Cross-market correlations (30-day) are currently pressuring BTC."
       ],
       "buy_zones": [
         "4,365.88 – 4,383.37",
         "4,436.11 – 4,453.89"
       ],
       "sell_zones": [
-        "4,535.19 – 4,553.36",
+        "4,536.36 – 4,554.54",
         "4,678.08 – 4,696.82"
       ],
       "supports": [
@@ -53,15 +53,15 @@
         "4,445.00"
       ],
       "resistances": [
-        "4,544.27",
+        "4,545.45",
         "4,687.45",
         "4,765.20"
       ],
       "invalidations": [],
       "invalidation_levels": [],
-      "entry_price": 4516.2998046875,
-      "created": "2026-09-04T10:50:44+00:00",
-      "valid_until": "2026-09-09T10:50:44+00:00",
+      "entry_price": 4521.0,
+      "created": "2026-09-04T11:02:41+00:00",
+      "valid_until": "2026-09-09T11:02:41+00:00",
       "modules": [
         "correlation",
         "nds",
@@ -72,20 +72,20 @@
     "BTC": {
       "asset": "BTC",
       "direction": "bullish",
-      "net": 0.569,
+      "net": 0.574,
       "confidence": 69,
       "risk": "low",
       "horizon": "2-7d",
       "reasons": [
         "Market structure: higher highs + higher lows (uptrend structure). Last displacement leg is 1.8× the average daily range (strong).",
-        "Price 81,081 sits above its main moving averages (75,243.33/70,687.42/72,585.20) — trend is up.",
+        "Price 81,102 sits above its main moving averages (75,245.31/70,688.23/72,585.41) — trend is up.",
         "MACD momentum is positive and rising.",
         "Crypto Fear & Greed index at 74/100 (greed).",
         "RSI(14) = 72.7 — overbought, momentum stretched."
       ],
       "buy_zones": [
         "70,013 – 70,294",
-        "78,563 – 78,878"
+        "78,564 – 78,879"
       ],
       "sell_zones": [
         "86,035 – 86,380"
@@ -93,7 +93,7 @@
       "supports": [
         "65,911",
         "70,153",
-        "78,720"
+        "78,721"
       ],
       "resistances": [
         "86,208",
@@ -101,14 +101,14 @@
         "89,234"
       ],
       "invalidations": [
-        "A daily close below 78,720 breaks the nearest support / market structure."
+        "A daily close below 78,721 breaks the nearest support / market structure."
       ],
       "invalidation_levels": [
-        78720.12746710527
+        78721.22121710527
       ],
-      "entry_price": 81080.7578125,
-      "created": "2026-09-04T10:50:44+00:00",
-      "valid_until": "2026-09-09T10:50:44+00:00",
+      "entry_price": 81101.5390625,
+      "created": "2026-09-04T11:02:41+00:00",
+      "valid_until": "2026-09-09T11:02:41+00:00",
       "modules": [
         "correlation",
         "nds",
@@ -128,14 +128,14 @@
     "changed": false,
     "high": [],
     "invalidations": {},
-    "ids_hash": "5fb469c83e9ec7cc737cc74e0e4c858c",
-    "fetched": "2026-09-04T10:50:44+00:00",
+    "ids_hash": "bd7e0393642390b278ad1859e56ff7be",
+    "fetched": "2026-09-04T11:02:41+00:00",
     "ok": false
   },
-  "updated": "2026-09-04T10:50:45+00:00",
+  "updated": "2026-09-04T11:02:41+00:00",
   "snap": {
-    "xauusd": 4516.2998046875,
-    "btc": 81080.7578125,
+    "xauusd": 4521.0,
+    "btc": 81101.5390625,
     "usdirr": 2202600.0,
     "geram18": 228348000.0
   }
