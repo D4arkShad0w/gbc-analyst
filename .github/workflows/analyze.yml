@@ -1,7 +1,7 @@
 name: market-analyst
 on:
   schedule:
-    - cron: "*/30 * * * *"   # watchdog every 30 min (UTC); full runs governed by state/schedule.json
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -24,6 +24,57 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
+
+      - name: 🔍 Doctor — تست سکرت‌ها و کلیدها
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python - <<'PY'
+          import os, requests
+          def st(name):
+              v = (os.getenv(name) or "").strip()
+              print(f"{name}: {'✔ SET (' + str(len(v)) + ' chars)' if v else '✖ EMPTY — سکرت ساخته نشده یا اسمش فرق دارد'}")
+              return v
+          print("──── بررسی وجود سکرت‌ها ────")
+          tg  = st("TELEGRAM_BOT_TOKEN")
+          ch  = st("TELEGRAM_CHAT_ID")
+          frd = st("FRED_API_KEY")
+          gem = st("GEMINI_API_KEY")
+          print("──── تست زندهٔ هر کلید ────")
+          if gem:
+              try:
+                  r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                                   params={"key": gem}, timeout=15)
+                  if r.ok:
+                      ms = [m["name"] for m in r.json().get("models", [])
+                            if "generateContent" in str(m.get("supportedGenerationMethods", []))]
+                      print(f"Gemini: ✔ کلید سالم — {len(ms)} مدل در دسترس، نمونه: {ms[:3]}")
+                  else:
+                      print(f"Gemini: ✖ HTTP {r.status_code} — کلید نامعتبر است")
+              except Exception as e:
+                  print("Gemini: خطای اتصال:", e)
+          if frd:
+              try:
+                  r = requests.get("https://api.stlouisfed.org/fred/series/observations",
+                                   params={"series_id": "DGS10", "api_key": frd,
+                                           "file_type": "json", "limit": 1}, timeout=15)
+                  print(f"FRED: ✔ کلید سالم" if r.ok else
+                        f"FRED: ✖ HTTP {r.status_code} — کلید نامعتبر یا فاصله/کاراکتر اضافه دارد")
+              except Exception as e:
+                  print("FRED: خطای اتصال:", e)
+          if tg:
+              try:
+                  r = requests.get(f"https://api.telegram.org/bot{tg}/getMe", timeout=10)
+                  print("Telegram token: ✔ سالم" if r.ok else f"Telegram token: ✖ HTTP {r.status_code}")
+              except Exception as e:
+                  print("Telegram: خطای اتصال:", e)
+          if tg and ch:
+              print("Chat ID — تست واقعی ارسال را در گزارش اصلی ببین.")
+          print("──── پایان Doctor ────")
+          PY
 
       - name: Run analyst
         env:
