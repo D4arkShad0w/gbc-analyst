@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GBC ANALYST — all-in-one AI Gold & Bitcoin Market Analyst (Iran-focused)
-=========================================================================
-Single file. Runs on GitHub Actions. Reports to Telegram.
-
-Two separate decision chains:
-  GOLD_IR : Global gold → USD/IRR (free market) → implied local price → premium → prediction
-  XAUUSD  : Global gold (technicals + NDS structure + macro + correlations + news AI)
-  BTC     : Macro/liquidity → risk sentiment → BTC → Iranian exchange premium
-
-Every prediction is PROBABILISTIC with explicit invalidation conditions.
-Never certainty. Not financial advice.
-
+GBC ANALYST — تحلیلگر طلایی بیت‌کوین (نسخهٔ تک‌فایل، خروجی فارسی)
+=================================================================
 Usage:
-  python gbc_analyst.py --full          # comprehensive analysis
-  python gbc_analyst.py --quick         # cheap watchdog (shocks, invalidations, hot news)
-  python gbc_analyst.py --auto          # recommended for CI (quick, escalates to full when due)
-  python gbc_analyst.py --test-notify   # send a Telegram test message
-
-Env vars (or .env file):
-  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FRED_API_KEY,
-  GEMINI_API_KEY (or GOOGLE_API_KEY),
-  GEMINI_MODELS   (optional comma-separated override),
-  CRYPTOPANIC_TOKEN (optional), NOTIFY=0 to mute Telegram.
+  python gbc_analyst.py --full | --quick | --auto | --test-notify
 """
 
 import os, re, sys, json, csv, time, html, hashlib
@@ -59,12 +40,11 @@ CFG = {
     "CRYPTOPANIC_TOKEN": os.getenv("CRYPTOPANIC_TOKEN", ""),
     "STATE_DIR":      os.getenv("STATE_DIR", "state"),
     "NOTIFY":         os.getenv("NOTIFY", "1") == "1",
-    # Base module weights (the grading loop adapts these from real hit rates)
     "WEIGHTS": {"technical": 1.0, "nds": 1.2, "correlation": 0.8, "macro": 1.5,
                 "sentiment": 0.9, "ai_events": 1.8, "iran_local": 1.6},
-    "MIN_CONF": 40, "MAX_CONF": 92,           # confidence is clamped — never 100%
+    "MIN_CONF": 40, "MAX_CONF": 92,
     "SHOCK": {"XAUUSD": 0.015, "BTC": 0.035, "USDIRR": 0.010},
-    "INTEL_MAX_AGE_H": 8,                     # reuse cached LLM news analysis for 8h
+    "INTEL_MAX_AGE_H": 8,
 }
 
 P_STATE  = os.path.join(CFG["STATE_DIR"], "market_state.json")
@@ -75,7 +55,7 @@ P_GEM    = os.path.join(CFG["STATE_DIR"], "gemini.json")
 P_HIST   = os.path.join(CFG["STATE_DIR"], "history", "snapshots.csv")
 
 # ======================================================================
-# 2. SMALL UTILITIES
+# 2. UTILITIES + فارسی‌سازی
 # ======================================================================
 def now():     return datetime.now(timezone.utc)
 def nowiso():  return now().isoformat(timespec="seconds")
@@ -102,7 +82,6 @@ def retry(fn, tries=3, wait=2):
     raise last
 
 def sig(module, asset, score, conf, why, w=1.0, horizon="2-7d"):
-    """A signal: direction (-1..+1), own confidence (0..1), weight, plain-language why."""
     return {"module": module, "asset": asset,
             "score": max(-1.0, min(1.0, float(score))), "conf": float(conf),
             "w": float(w), "why": why, "horizon": horizon}
@@ -112,6 +91,27 @@ def fmt(v):
 
 def esc(t):
     return html.escape(str(t), quote=False)
+
+FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+def fa(v):
+    """تبدیل عدد به رقم فارسی (برای درصدها و شمارنده‌ها)"""
+    return str(v).translate(FA_DIGITS)
+
+DIR_FA  = {"bullish": "📈 انتظار بالا رفتن قیمت",
+           "bearish": "📉 انتظار پایین آمدن قیمت",
+           "neutral": "↔️ بدون تغییر بزرگ (بلاتکلیف)"}
+DIR_S   = {"bullish": "صعودی", "bearish": "نزولی", "neutral": "بلاتکلیف"}
+RISK_FA = {"low": "🟢 کم", "medium": "🟡 متوسط", "high": "🔴 بالا"}
+HOR_FA  = {"2-7d": "۲ تا ۷ روز آینده"}
+TITLES  = {"GOLD_IR": "🥇 طلا در ایران", "XAUUSD": "🌍 طلای جهانی", "BTC": "₿ بیت‌کوین"}
+SHORTN  = {"GOLD_IR": "طلا ایران", "XAUUSD": "طلا جهانی", "BTC": "بیت‌کوین"}
+UNITS   = {"GOLD_IR": "ریال", "XAUUSD": "دلار", "BTC": "دلار"}
+TIMING_FA = {"next 24-72h": "۲۴ تا ۷۲ ساعت آینده", "this week": "همین هفته",
+             "next week": "هفتهٔ بعد", "ongoing": "در جریان", "unknown": ""}
+FALLBACK_PLAIN = {
+    "bullish": "نشانه‌های بازار بیشتر به سمت بالا رفتن قیمت است.",
+    "bearish": "نشانه‌های بازار بیشتر به سمت پایین آمدن قیمت است.",
+    "neutral": "فعلاً نشانه‌ای برای حرکت بزرگ نیست؛ احتمالاً قیمت تقریباً همین‌طور می‌ماند."}
 
 # ======================================================================
 # 3. DATA — GLOBAL MARKETS (yfinance)
@@ -127,7 +127,7 @@ def fetch_history(sym, period="1y"):
             df.columns = df.columns.get_level_values(0)
         return df.dropna()
     df = retry(_d, tries=3, wait=2)
-    if df.empty and sym == "XAUUSD":                     # fallback: GLD scaled to gold
+    if df.empty and sym == "XAUUSD":
         g = fetch_history("GLD", period)
         return g * (2400.0 / float(g["Close"].iloc[-1]))
     return df
@@ -153,7 +153,7 @@ def global_snapshots():
     return snaps, frames
 
 # ======================================================================
-# 4. DATA — IRAN (TGJU free-market dollar / 18k gold / coin, Nobitex USDT/BTC)
+# 4. DATA — IRAN (TGJU + Nobitex)
 # ======================================================================
 TGJU_URL = "https://api.tgju.org/v1/market/indicator/summary-table-data/{code}"
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
@@ -173,7 +173,7 @@ def nobitex():
                          headers=UA, timeout=15)
         r.raise_for_status()
         s = r.json()["stats"]
-        return float(s["usdt-irt"]["latest"]) * 10, float(s["btc-irt"]["latest"]) * 10  # → RIAL
+        return float(s["usdt-irt"]["latest"]) * 10, float(s["btc-irt"]["latest"]) * 10
     return retry(_g, tries=2, wait=1)
 
 def iran_snapshot(xau):
@@ -190,13 +190,13 @@ def iran_snapshot(xau):
     try:
         usdt, btc = nobitex()
         snap["usdt_irt_rial"], snap["btc_irt_rial"] = usdt, btc
-        if not snap["usdirr_free"] and usdt:            # fallback dollar proxy (typical USDT discount)
+        if not snap["usdirr_free"] and usdt:
             snap["usdirr_free"] = round(usdt * 0.985)
     except Exception:
         pass
     usd, g18 = snap["usdirr_free"], snap["geram18_rial"]
     if usd and g18 and xau:
-        implied = xau * usd * 0.75 / 31.1035            # implied 18k gram in Rial
+        implied = xau * usd * 0.75 / 31.1035
         snap["geram18_implied_rial"] = implied
         snap["geram18_premium_pct"] = (g18 / implied - 1.0) * 100
     if snap["usdt_irt_rial"] and usd:
@@ -254,7 +254,7 @@ def macro_snapshot():
     return out
 
 # ======================================================================
-# 6. DATA — NEWS (Google News RSS + GDELT + CryptoPanic)
+# 6. DATA — NEWS
 # ======================================================================
 QUERIES = ["gold price", "bitcoin", "federal reserve interest rate decision",
            "US inflation CPI", "iran sanctions", "iran rial dollar",
@@ -313,7 +313,7 @@ def collect_news():
     return uniq[:60]
 
 # ======================================================================
-# 7. INDICATORS (hand-rolled, textbook formulas — no pandas_ta needed)
+# 7. INDICATORS
 # ======================================================================
 def ema(s, n): return s.ewm(span=n, adjust=False).mean()
 
@@ -341,7 +341,7 @@ def atr_pctile_now(df):
     return float((a < a.iloc[-1]).mean() * 100) if len(a) > 20 else 50.0
 
 # ======================================================================
-# 8. ANALYSIS — TECHNICAL
+# 8. ANALYSIS — TECHNICAL (دلایل به فارسی ساده)
 # ======================================================================
 def technical_block(df):
     c = df["Close"].squeeze()
@@ -360,28 +360,45 @@ def technical_signals(asset, t):
     else: stack -= 0.5
     if t["ema200"] is not None:
         stack += 0.5 if t["close"] > t["ema200"] else -0.5
-    ema_txt = f"{t['ema20']:,.2f}/{t['ema50']:,.2f}"
-    if t["ema200"] is not None: ema_txt += f"/{t['ema200']:,.2f}"
-    out.append(sig("technical", asset, stack, 0.7,
-                   f"Price {fmt(t['close'])} sits {'above' if stack > 0 else 'below'} its main moving "
-                   f"averages ({ema_txt}) — trend is {'up' if stack > 0 else 'down or weak'}."))
+    if stack > 0:
+        why = (f"قیمت ({fmt(t['close'])}) بالای میانگین‌های قیمتی خودش نشسته؛ "
+               f"یعنی روند کلی بازار رو به بالا است.")
+    else:
+        why = (f"قیمت ({fmt(t['close'])}) زیر میانگین‌های قیمتی خودش است؛ "
+               f"یعنی روند کلی بازار رو به پایین است.")
+    out.append(sig("technical", asset, stack, 0.7, why))
     r = t["rsi"]
     rs = (r - 50) / 25 if 30 <= r <= 70 else (0.3 if r > 70 else -0.3)
-    out.append(sig("technical", asset, rs, 0.5,
-                   f"RSI(14) = {r:.1f} — " +
-                   ("overbought, momentum stretched." if r > 70 else
-                    "oversold, momentum stretched." if r < 30 else "balanced momentum.")))
+    if r > 70:
+        txt = (f"قیمت چند روز است خیلی تند بالا رفته (اشباع خرید). احتمال یک "
+               f"توقف یا اصلاح کوتاه وجود دارد.")
+    elif r < 30:
+        txt = (f"قیمت چند روز است تند پایین آمده (اشباع فروش). احتمال یک "
+               f"برگشت کوتاه وجود دارد.")
+    else:
+        txt = "فشار خرید و فروش نسبتاً متعادل است."
+    out.append(sig("technical", asset, rs, 0.5, txt))
     mh, mp = t["macd_hist"], t["macd_hist_prev"]
-    out.append(sig("technical", asset, 1.0 if mh > 0 else -1.0, 0.6,
-                   f"MACD momentum is {'positive' if mh > 0 else 'negative'} and "
-                   f"{'rising' if mh > mp else 'fading'}."))
+    if mh > 0:
+        txt = "نیروی خرید بیشتر از فروش است" + (" و هنوز قوی‌تر می‌شود." if mh > mp else " ولی دارد کم‌رنگ می‌شود.")
+    else:
+        txt = "نیروی فروش بیشتر از خرید است" + (" و دارد شدیدتر می‌شود." if mh < mp else " ولی دارد کم‌رنگ می‌شود.")
+    out.append(sig("technical", asset, 1.0 if mh > 0 else -1.0, 0.6, txt))
     return out
 
 # ======================================================================
-# 9. ANALYSIS — NDS / MARKET STRUCTURE + SUPPORT & RESISTANCE
-#    NDS implemented deterministically: swing nodes → displacement legs
-#    (range ÷ ATR) → structure sequence (HH/HL vs LH/LL) → score.
+# 9. ANALYSIS — NDS / MARKET STRUCTURE + S/R
 # ======================================================================
+SEQ_FA = {
+    "higher highs + higher lows (uptrend structure)":
+        "سقف‌ها و کف‌ها هر بار بالاتر از قبل ساخته می‌شوند ← روند صعودی",
+    "lower highs + lower lows (downtrend structure)":
+        "سقف‌ها و کف‌ها هر بار پایین‌تر از قبل ساخته می‌شوند ← روند نزولی",
+    "mixed swings (range)":
+        "سقف‌ها و کف‌ها نامنظم‌اند ← بازار در یک محدوده گیر کرده",
+    "not enough swing points yet": "دادهٔ کافی برای تشخیص الگو نیست",
+}
+
 def swings(df, w=3):
     hi, lo, n = df["High"].squeeze(), df["Low"].squeeze(), len(df)
     nodes = []
@@ -389,7 +406,7 @@ def swings(df, w=3):
         if hi.iloc[i] >= hi.iloc[i - w:i + w + 1].max(): nodes.append([i, float(hi.iloc[i]), "H"])
         if lo.iloc[i] <= lo.iloc[i - w:i + w + 1].min(): nodes.append([i, float(lo.iloc[i]), "L"])
     out = []
-    for nd in nodes:                                   # enforce H/L alternation
+    for nd in nodes:
         if out and out[-1][2] == nd[2]:
             if (nd[2] == "H" and nd[1] >= out[-1][1]) or (nd[2] == "L" and nd[1] <= out[-1][1]):
                 out[-1] = nd
@@ -418,9 +435,10 @@ def structure_block(df):
     return {"score": score, "seq": seq, "atr": a, "close": close, "disp": disp}
 
 def nds_signal(asset, b):
-    return sig("nds", asset, b["score"], 0.75,
-               f"Market structure: {b['seq']}. Last displacement leg is {b['disp']:.1f}× the "
-               f"average daily range ({'strong' if b['disp'] > 1.5 else 'moderate' if b['disp'] > 0.8 else 'weak'}).")
+    strength = "قدرتمند" if b["disp"] > 1.5 else "متوسط" if b["disp"] > 0.8 else "ضعیف"
+    why = (f"الگوی سقف و کف: {SEQ_FA.get(b['seq'], b['seq'])}. "
+           f"آخرین حرکت قیمت {fa(f\"{b['disp']:.1f}\")} برابرِ میانگین روزهای قبل بوده ({strength}).")
+    return sig("nds", asset, b["score"], 0.75, why)
 
 def support_resistance(df, atr_v, max_each=3):
     pts = sorted([p for _, p, _ in swings(df)] + [float(df["Close"].iloc[-1])])
@@ -456,9 +474,12 @@ def correlation_signals(frames):
                     vals.append(expect * c * ret[peer].tail(5).sum() * 3)
         if vals:
             s = max(-1.0, min(1.0, sum(vals) / len(vals)))
-            out.append(sig("correlation", asset, s, min(0.8, 0.4 + 0.1 * len(vals)),
-                           f"Cross-market correlations (30-day) are currently "
-                           f"{'supportive of' if s > 0 else 'pressuring'} {asset}."))
+            why = ("وضعیت دلار، نرخ بهره و بقیهٔ بازارها الان در جهت‌هایی است که "
+                   "معمولاً به نفع این بازار تمام می‌شود."
+                   if s > 0 else
+                   "وضعیت دلار، نرخ بهره و بقیهٔ بازارها الان در جهت‌هایی است که "
+                   "معمولاً علیه این بازار تمام می‌شود.")
+            out.append(sig("correlation", asset, s, min(0.8, 0.4 + 0.1 * len(vals)), why))
     add("XAUUSD", [("DXY", -1), ("US10Y", -1), ("OIL", 0.5)])
     add("BTC",    [("SPX", 1), ("DXY", -1), ("XAUUSD", 0.3)])
     return out
@@ -469,38 +490,40 @@ def correlation_signals(frames):
 def macro_signals(mac, g):
     out = []
     if not mac: return out
-    parts, why = [], []
+    bits, parts = [], []
     if "real10y_chg_5d" in mac:
         parts.append(-mac["real10y_chg_5d"] * 15)
-        why.append(f"10Y real yield {mac.get('real10y', 0):.2f}% (5d Δ {mac['real10y_chg_5d']:+.2f})")
+        bits.append("بهرهٔ واقعی آمریکا " + ("پایین آمده" if mac["real10y_chg_5d"] < 0 else "بالا رفته"))
     if g.get("DXY", {}).get("chg_7d") is not None:
         parts.append(-g["DXY"]["chg_7d"] * 20)
-        why.append(f"dollar index {'weaker' if g['DXY']['chg_7d'] < 0 else 'stronger'} "
-                   f"({g['DXY']['chg_7d'] * 100:+.1f}% / 5d)")
+        bits.append("دلار " + ("ضعیف شده" if g["DXY"]["chg_7d"] < 0 else "قوی شده"))
     if "fed_bs_chg_4w_pct" in mac:
         parts.append(mac["fed_bs_chg_4w_pct"] * 10)
-        why.append(f"Fed balance sheet {mac['fed_bs_chg_4w_pct']:+.2f}% / 4w")
+        bits.append("نقدینگی جهانی " + ("زیاد شده" if mac["fed_bs_chg_4w_pct"] > 0 else "کم شده"))
     if parts:
-        out.append(sig("macro", "XAUUSD", max(-1, min(1, sum(parts) / len(parts))), 0.75,
-                       "Macro backdrop: " + "; ".join(why) +
-                       ". Falling real yields and a weaker dollar are tailwinds for gold.",
+        s = max(-1.0, min(1.0, sum(parts) / len(parts)))
+        out.append(sig("macro", "XAUUSD", s, 0.75,
+                       "شرایط کلی: " + "، ".join(bits) +
+                       f" — این ترکیب معمولاً قیمت طلا را {'بالا' if s > 0 else 'پایین'} می‌برد.",
                        horizon="weekly"))
-    bparts, bwhy = [], []
+    bbits, bparts = [], []
     if "fed_bs_chg_4w_pct" in mac or "m2_yoy" in mac:
         bparts.append((mac.get("fed_bs_chg_4w_pct", 0) * 12 + mac.get("m2_yoy", 0)) * 0.05)
-        bwhy.append(f"liquidity (Fed BS {mac.get('fed_bs_chg_4w_pct', 0):+.2f}%/4w, "
-                    f"M2 YoY {mac.get('m2_yoy', 0):+.1f}%)")
+        bbits.append("پولِ ارزان در جهان " +
+                     ("زیاد شده" if mac.get("fed_bs_chg_4w_pct", 0) > 0 else "کم شده"))
     if g.get("SPX", {}).get("chg_7d") is not None and g.get("VIX", {}).get("chg_7d") is not None:
         bparts.append(g["SPX"]["chg_7d"] * 15 - g["VIX"]["chg_7d"] * 0.3)
-        bwhy.append(f"risk appetite (S&P 5d {g['SPX']['chg_7d'] * 100:+.1f}%, "
-                    f"VIX {g['VIX'].get('price', 0):.0f})")
+        bbits.append("بازار سهام آمریکا " + ("سرحال است" if g["SPX"]["chg_7d"] > 0 else "ترسیده"))
     if bparts:
-        out.append(sig("macro", "BTC", max(-1, min(1, sum(bparts) / len(bparts))), 0.7,
-                       "Macro backdrop for crypto: " + "; ".join(bwhy) + ".", horizon="weekly"))
+        s = max(-1.0, min(1.0, sum(bparts) / len(bparts)))
+        out.append(sig("macro", "BTC", s, 0.7,
+                       "شرایط کلی: " + "، ".join(bbits) +
+                       f" — این ترکیب معمولاً {'به نفع' if s > 0 else 'علیه'} بیت‌کوین است.",
+                       horizon="weekly"))
     return out
 
 # ======================================================================
-# 12. ANALYSIS — SENTIMENT (VADER + Fear & Greed)
+# 12. ANALYSIS — SENTIMENT
 # ======================================================================
 _VADER = SentimentIntensityAnalyzer()
 
@@ -520,23 +543,20 @@ def sentiment_signals(items, fng=None):
     out = []
     vs = headline_sentiment(items)
     if items:
+        tone = "مثبت" if vs > 0.05 else "منفی" if vs < -0.05 else "بی‌طرف"
         out.append(sig("sentiment", "XAUUSD", vs * 0.5, 0.4,
-                       f"News headline sentiment across {len(items)} recent stories is "
-                       f"{'positive' if vs > 0.05 else 'negative' if vs < -0.05 else 'neutral'}."))
+                       f"لحن اخبار اخیر ({fa(len(items))} خبر) در مجموع {tone} است."))
     if fng is not None:
+        mood = "طمع — جمعیت معامله‌گر خریدار است" if fng > 60 else \
+               "ترس — جمعیت معامله‌گر می‌فروشد" if fng < 40 else "بی‌طرف"
         out.append(sig("sentiment", "BTC", (fng - 50) / 50, 0.5,
-                       f"Crypto Fear & Greed index at {fng}/100 "
-                       f"({'greed' if fng > 60 else 'fear' if fng < 40 else 'neutral'})."))
+                       f"شاخص ترس و طمع = {fa(fng)} از ۱۰۰ ({mood})."))
     return out
 
 # ======================================================================
 # 13. ANALYSIS — IRAN-SPECIFIC MODELS
-#     Iranian gold ≈ (XAU/USD) × (USD/IRR) × local premium.
-#     USD/IRR is usually the dominant driver and can fully offset a
-#     global gold drop — that's why it carries the highest weight.
 # ======================================================================
 def iran_levels(rows):
-    """Support/resistance for the 18k gram (Rial) from accumulated daily history."""
     seq = [float(r["geram18_rial"]) for r in rows[-60:]
            if r.get("geram18_rial") not in ("", None)]
     if len(seq) < 15: return [], []
@@ -552,46 +572,60 @@ def iran_gold_signals(snap, rows, ai_usdirr):
     chg7 = snap.get("usdirr_chg_7d") or 0
     if usd:
         s = max(-1.0, min(1.0, chg7 * 40))
-        out.append(sig("iran_local", "GOLD_IR", s, 0.8,
-                       f"Free-market USD/IRR at {usd:,.0f} rial is "
-                       f"{'rising' if s > 0.1 else 'falling' if s < -0.1 else 'flat'} "
-                       f"({chg7 * 100:+.2f}% over ~5 days) — the single biggest driver of "
-                       f"Iranian gold prices.", w=1.6))
+        if s > 0.1:
+            why = (f"دلار آزاد {fmt(usd)} ریال است و در چند روز اخیر {chg7 * 100:+.2f}٪ بالا رفته — "
+                   f"این مهم‌ترین عاملِ بالا رفتن طلای ایران است (طلای داخل بیشتر تابع دلار است "
+                   f"تا طلای جهانی).")
+        elif s < -0.1:
+            why = (f"دلار آزاد {fmt(usd)} ریال است و در چند روز اخیر {chg7 * 100:+.2f}٪ پایین آمده — "
+                   f"این فشار پایین روی قیمت طلای ایران است.")
+        else:
+            why = (f"دلار آزاد {fmt(usd)} ریال است و تقریباً ثابت مانده — یعنی موتور اصلی "
+                   f"حرکت طلای داخل فعلاً خاموش است.")
+        out.append(sig("iran_local", "GOLD_IR", s, 0.8, why, w=1.6))
     xs = snap.get("xau_score", 0)
     if xs:
         out.append(sig("iran_local", "GOLD_IR", xs * 0.6, 0.6,
-                       "Global gold trend partially passes through to local prices after "
-                       "currency conversion.", w=1.2))
+                       "طلای جهانی روند " + ("صعودی" if xs > 0 else "نزولی") +
+                       " دارد و بخشی از آن (نه همهٔ آن) به قیمت داخل منتقل می‌شود.", w=1.2))
     if prem is not None and len(rows) >= 20:
         hist = [float(r["geram18_premium_pct"]) for r in rows
                 if r.get("geram18_premium_pct") not in ("", None)]
         if len(hist) >= 20 and pstdev(hist) > 0.01:
             z = (prem - mean(hist)) / pstdev(hist)
-            out.append(sig("iran_local", "GOLD_IR", max(-1.0, min(1.0, -z * 0.6)), 0.5,
-                           f"Local 18k gold trades at {prem:+.1f}% ({z:+.1f}σ) vs its implied "
-                           f"value (global gold × USD/IRR). " +
-                           ("Stretched premium raises pullback risk." if z > 1 else
-                            "Discount leaves room for local catch-up." if z < -1 else
-                            "Premium is near its normal range.")))
+            if z > 1:
+                txt = (f"طلای داخل حدود {prem:+.1f}٪ گران‌تر از ارزش واقعی‌اش است؛ "
+                       f"یعنی بیش از حد داغ شده و احتمال سرد شدن و عقب‌نشینی کوتاه دارد.")
+            elif z < -1:
+                txt = (f"طلای داخل حدود {prem:+.1f}٪ ارزان‌تر از ارزش واقعی‌اش است؛ "
+                       f"یعنی عقب مانده و اگر اوضاع عادی شود، جا برای بالا آمدن دارد.")
+            else:
+                txt = "قیمت داخل تقریباً همان ارزش واقعی‌اش است؛ حاشیهٔ خاصی وجود ندارد."
+            out.append(sig("iran_local", "GOLD_IR", max(-1.0, min(1.0, -z * 0.6)), 0.5, txt))
     elif prem is not None:
+        side = "ارزان‌تر" if prem < 0 else "گران‌تر"
         out.append(sig("iran_local", "GOLD_IR", 0, 0.4,
-                       f"Local premium vs implied value: {prem:+.1f}% "
-                       f"(needs ~3 more weeks of history for a z-score)."))
+                       f"طلای داخل حدود {abs(prem):.1f}٪ {side} از ارزش واقعی‌اش است "
+                       f"(برای قضاوت دقیق‌تر چند هفتهٔ دیگر داده لازم است)."))
     if abs(ai_usdirr) > 0.15:
         out.append(sig("ai_events", "GOLD_IR", ai_usdirr, 0.7,
-                       "Recent Iran-related news (sanctions, conflict, domestic policy) is "
-                       "expected to pressure the rial and, with it, local gold and coin prices.",
+                       "بررسی اخبار مهم (تحریم، تنش، سیاست داخلی) نشان می‌دهد فضای خبری "
+                       "الان فشار " + ("به سمت ضعیف شدن دلار و ارزان شدن" if ai_usdirr < 0
+                                       else "به سمت گران شدن") + " طلای داخل دارد.",
                        w=1.8))
     return out
 
 def btc_ir_signal(prem):
     if prem is None: return None
-    return sig("iran_local", "BTC", max(-1.0, min(1.0, prem / 8)), 0.5,
-               f"BTC trades at {prem:+.1f}% vs its converted global price on Iranian "
-               f"exchanges — {'strong local demand' if prem > 2 else 'weak local demand' if prem < -2 else 'normal spread'}.")
+    if prem > 2:   txt = (f"بیت‌کوین در صرافی‌های داخل حدود {prem:+.1f}٪ گران‌تر از قیمت جهانی "
+                          f"(با دلار آزاد) معامله می‌شود؛ یعنی تقاضای داخل قوی است.")
+    elif prem < -2: txt = (f"بیت‌کوین در صرافی‌های داخل حدود {abs(prem):.1f}٪ ارزان‌تر از قیمت جهانی "
+                           f"معامله می‌شود؛ یعنی تقاضای داخل ضعیف است.")
+    else:           txt = "تفاوت قیمت بیت‌کوین داخل با قیمت جهانی در حالت عادی است."
+    return sig("iran_local", "BTC", max(-1.0, min(1.0, prem / 8)), 0.5, txt)
 
 # ======================================================================
-# 14. AI LAYER — GEMINI (REST, model rotation, quota-friendly)
+# 14. AI LAYER — GEMINI
 # ======================================================================
 GEM_SYS = """You are a financial news analyst for GOLD and BITCOIN markets, with special
 expertise in IRAN (USD/IRR free-market rate, Iranian gold & coin market, Iranian crypto market).
@@ -601,25 +635,31 @@ Classify each headline. Return ONLY JSON:
  "impact":"high|medium|low|noise|structural",
  "gold":-1..1,"bitcoin":-1..1,"usdirr":-1..1,
  "timing":"next 24-72h|this week|next week|ongoing|unknown"}],
- "digest":"3-sentence summary of the current market narrative",
+ "digest":"3-sentence summary — WRITE IT IN SIMPLE PERSIAN (FARSI)",
  "narrative_changed": true|false,
- "high_impact_events":[{"name":"...","asset":"gold|bitcoin|usdirr","timing":"..."}],
- "invalidations":{"gold":["specific condition that would flip the current gold view"],
-                  "bitcoin":["..."],"usdirr":["..."]}}
+ "high_impact_events":[{"name":"... — WRITE NAME IN SIMPLE PERSIAN","asset":"gold|bitcoin|usdirr","timing":"..."}],
+ "invalidations":{"gold":["condition — WRITE IN SIMPLE PERSIAN"],
+                  "bitcoin":["... — PERSIAN"],"usdirr":["... — PERSIAN"]}}
 
 Rules:
 - impact=high ONLY if it can move gold/BTC/USD-IRR by more than 1-2% within 24-72h.
 - impact=structural for long-term regime shifts (e.g., central banks accelerating gold buying).
 - impact=noise for routine chatter and opinion pieces.
-- usdirr: +1 means news pressures USD/IRR UP (rial weakens → Iranian gold/coin prices tend UP).
-- Be conservative. Scores reflect the direction of the EXPECTED price move, not moral judgment."""
+- usdirr: +1 means news pressures USD/IRR UP (rial weakens -> Iranian gold/coin prices tend UP).
+- Be conservative. Scores reflect the direction of the EXPECTED price move.
+- Persian text must be simple enough for a non-expert (no jargon like RSI, resistance)."""
+
+SIMPLE_SYS = """You write in VERY simple Persian (Farsi) for people who know nothing about trading.
+Input: JSON of market predictions that are already computed. Do NOT change or invent any number.
+For each asset write ONE short sentence (max 22 words) in Persian saying: what is likely to
+happen in the next few days, and the single main reason. Use everyday words only —
+never say 'resistance', 'support', 'RSI', 'MACD', 'structure'.
+Return ONLY JSON with keys: gold_ir, gold_global, btc."""
 
 SAFETY = [{"category": f"HARM_CATEGORY_{c}", "threshold": "BLOCK_ONLY_HIGH"}
           for c in ("HARASSMENT", "HATE_SPEECH", "SEXUALLY_EXPLICIT", "DANGEROUS_CONTENT")]
 
 def gemini_chat(system, user, max_tokens=4096, json_mode=True):
-    """Tries each configured Gemini model in order (starting from the last one that
-    worked). On quota errors (429) / model errors (403, 404) it rotates to the next."""
     if not CFG["GEMINI_KEY"] or not CFG["GEMINI_MODELS"]:
         return ""
     models = CFG["GEMINI_MODELS"]
@@ -660,7 +700,7 @@ def parse_json(text):
 
 def fallback_intel():
     return {"scores": {"gold": 0, "bitcoin": 0, "usdirr": 0},
-            "digest": "(LLM unavailable — AI event analysis disabled this run.)",
+            "digest": "(تحلیل هوش مصنوعی در این اجرا در دسترس نبود.)",
             "changed": False, "high": [], "invalidations": {}, "ok": False}
 
 def analyze_news(items, prev_digest=""):
@@ -687,7 +727,6 @@ def analyze_news(items, prev_digest=""):
             "ok": True}
 
 def get_intel(items, st):
-    """LLM quota saver: reuse cached news intelligence if headlines unchanged recently."""
     if not items:
         return fallback_intel(), True
     ids_hash = hashlib.md5("|".join(sorted(i["id"] for i in items)).encode()).hexdigest()
@@ -702,11 +741,28 @@ def get_intel(items, st):
     intel.update({"ids_hash": ids_hash, "fetched": nowiso()})
     return intel, False
 
+def gemini_plain(preds):
+    """جملهٔ خیلی سادهٔ فارسی برای هر بازار — یک فراخوان اضافهٔ Gemini"""
+    if not CFG["GEMINI_KEY"] or not preds:
+        return {}
+    payload = {}
+    for a, p in preds.items():
+        payload[a] = {"direction": DIR_FA[p["direction"]],
+                      "confidence_percent": p["confidence"],
+                      "current_price": p["entry_price"],
+                      "top_reasons": p["reasons"][:2]}
+    try:
+        txt = gemini_chat(SIMPLE_SYS, json.dumps(payload, ensure_ascii=False),
+                          json_mode=True, max_tokens=800)
+        d = parse_json(txt)
+        return {k: v.strip() for k, v in d.items() if isinstance(v, str) and v.strip()}
+    except Exception:
+        return {}
+
 # ======================================================================
-# 15. DECISION ENGINE — signal fusion, confidence, risk, zones
+# 15. DECISION ENGINE
 # ======================================================================
 def adapted_weights():
-    """Base weight × accuracy multiplier learned from closed predictions."""
     W = dict(CFG["WEIGHTS"])
     for mod, s in jload(P_GRADE, {}).get("module_stats", {}).items():
         if mod in W and s.get("total", 0) >= 5:
@@ -743,10 +799,12 @@ def make_prediction(asset, signals, levels, intel, entry, horizon="2-7d", days=5
     sell_zones = [zone(v) for v in (res[:2] if direction != "bullish" else res[:1])]
     inv, inv_levels = [], []
     if direction == "bullish" and sup:
-        inv.append(f"A daily close below {fmt(sup[-1])} breaks the nearest support / market structure.")
+        inv.append(f"اگر قیمت یک روزِ کامل پایین‌تر از {fmt(sup[-1])} بسته شود، "
+                   f"این تحلیل غلط است و باید کنار گذاشته شود.")
         inv_levels.append(sup[-1])
     elif direction == "bearish" and res:
-        inv.append(f"A daily close above {fmt(res[0])} reclaims the broken structure.")
+        inv.append(f"اگر قیمت یک روزِ کامل بالاتر از {fmt(res[0])} بسته شود، "
+                   f"این تحلیل غلط است و باید کنار گذاشته شود.")
         inv_levels.append(res[0])
     keymap = {"XAUUSD": "gold", "BTC": "bitcoin", "GOLD_IR": "usdirr"}
     inv += [str(x) for x in intel.get("invalidations", {}).get(keymap.get(asset, "gold"), [])][:2]
@@ -754,13 +812,12 @@ def make_prediction(asset, signals, levels, intel, entry, horizon="2-7d", days=5
             "confidence": conf, "risk": risk, "horizon": horizon,
             "reasons": [s["why"] for s in ranked if s["why"]],
             "buy_zones": buy_zones, "sell_zones": sell_zones,
-            "supports": [fmt(v) for v in sup], "resistances": [fmt(v) for v in res],
-            "invalidations": inv, "invalidation_levels": inv_levels,
             "entry_price": entry or 0, "created": nowiso(),
-            "valid_until": (now() + timedelta(days=days)).isoformat(timespec="seconds")}
+            "valid_until": (now() + timedelta(days=days)).isoformat(timespec="seconds"),
+            "invalidations": inv, "invalidation_levels": inv_levels}
 
 # ======================================================================
-# 16. GRADING LOOP — the system checks itself and adapts weights
+# 16. GRADING LOOP
 # ======================================================================
 def grade_and_adapt(prices_now):
     g = jload(P_GRADE, {"predictions": [], "module_stats": {}})
@@ -793,11 +850,9 @@ def register_predictions(preds):
     jsave(P_GRADE, g)
 
 # ======================================================================
-# 17. TELEGRAM — formatting, dedupe, sending
+# 17. TELEGRAM — خروجی فارسی ساده
 # ======================================================================
-ARROWS = {"bullish": "📈 Bullish", "bearish": "📉 Bearish", "neutral": "↔️ Range-bound"}
-RISKI  = {"low": "🟢 Low", "medium": "🟡 Medium", "high": "🔴 High"}
-TITLES = {"GOLD_IR": "🥇 GOLD — IRAN", "XAUUSD": "🌍 GOLD — GLOBAL", "BTC": "₿ BITCOIN"}
+ARROWS = {"bullish": "📈", "bearish": "📉", "neutral": "↔️"}
 
 def _chunks(t, n):
     while t:
@@ -842,51 +897,70 @@ def mark_sent(key):
     a["sent"] = {k: v for k, v in a["sent"].items() if time.time() - _ts(v) < 7 * 86400}
     jsave(P_ALERTS, a)
 
-def prediction_block(title, p):
-    z = ""
-    if p["buy_zones"]:  z += f"\n🟩 <b>Buy zone:</b> {' | '.join(p['buy_zones'])}"
-    if p["sell_zones"]: z += f"\n🟥 <b>Sell zone:</b> {' | '.join(p['sell_zones'])}"
-    if p["supports"]:   z += f"\n<b>Supports:</b> {', '.join(p['supports'][-2:])}"
-    if p["resistances"]:z += f"\n<b>Resistances:</b> {', '.join(p['resistances'][:2])}"
-    inv = "\n".join("• " + esc(i) for i in p["invalidations"][:3]) or "• N/A"
+def prediction_block(asset, p, plain=""):
+    title = TITLES.get(asset, asset)
+    lines = [f"<b>{title}</b>",
+             DIR_FA[p["direction"]],
+             f"احتمال درست بودن: <b>{fa(p['confidence'])}٪</b> (احتمال است، نه قطعیت)",
+             f"ریسک: {RISK_FA[p['risk']]}  •  بازه: {HOR_FA.get(p['horizon'], p['horizon'])}"]
+    if p["entry_price"]:
+        lines.append(f"قیمت فعلی: {fmt(p['entry_price'])} {UNITS.get(asset, '')}".strip())
+    if plain:
+        lines += ["", f"🤖 <b>خلاصهٔ ساده:</b> {esc(plain)}"]
     why = "\n".join("• " + esc(r) for r in p["reasons"][:5]) or "• —"
-    return (f"<b>{title}</b>\n"
-            f"Direction: {ARROWS[p['direction']]}\n"
-            f"Confidence: <b>{p['confidence']}%</b> (probability — not certainty)\n"
-            f"Risk: {RISKI[p['risk']]}  •  Timeframe: {p['horizon']}\n\n"
-            f"<b>Why?</b>\n{why}{z}\n\n<b>❌ Invalidation:</b>\n{inv}")
+    lines += ["", "<b>🔍 چرا؟ (به زبان ساده)</b>", why]
+    if p["buy_zones"]:
+        lines.append(f"🟩 <b>ناحیهٔ مناسب خرید:</b> {' | '.join(p['buy_zones'])}")
+    if p["sell_zones"]:
+        lines.append(f"🟥 <b>ناحیهٔ احتیاط/فروش:</b> {' | '.join(p['sell_zones'])}")
+    if p["invalidations"]:
+        lines.append("<b>❌ این تحلیل کِی غلط می‌شود؟</b>")
+        lines += ["• " + esc(i) for i in p["invalidations"][:3]]
+    else:
+        lines.append("❌ فعلاً شرط باطل‌کننده ندارم (چون جهت مشخصی نگفتم).")
+    return "\n".join(lines)
 
-def send_daily_report(preds, intel, weekly):
+LEGEND = ("\n\n📖 <b>راهنمای ساده:</b>\n"
+          "• «کف» یعنی قیمتی که بازار معمولاً زیرش نمی‌رود؛ «سقف» یعنی قیمتی که معمولاً بالایش نمی‌رود.\n"
+          "• احتمال ۷۰٪ یعنی از هر ۱۰ بارِ مشابه، حدود ۷ بار بازار همان‌طور می‌رود — تضمین نیست.\n"
+          "• ⚠️ این گزارش توصیهٔ مالی نیست.")
+
+def send_daily_report(preds, intel, weekly, plain):
     key = fp("daily", nowiso()[:10])
     if not should_send(key, 20): return
+    ov = "  |  ".join(f"{SHORTN[a]}: {DIR_S[p['direction']]} ({fa(p['confidence'])}٪)"
+                      for a, p in preds.items() if a in SHORTN)
     body = ""
     for a in ["GOLD_IR", "XAUUSD", "BTC"]:
-        if a in preds: body += "\n\n" + prediction_block(TITLES[a], preds[a])
-    ev = "\n".join(f"• [{esc(e.get('timing', '?'))}] {esc(e.get('name', '?'))} → {esc(e.get('asset', '?'))}"
-                   for e in intel.get("high", [])[:6]) or "• None flagged right now."
+        if a in preds:
+            body += "\n\n━━━━━━━━━━━━━\n" + prediction_block(a, preds[a], plain.get(a, ""))
+    ev = "\n".join(f"• {esc(e.get('name', '?'))} "
+                   f"({TIMING_FA.get(e.get('timing', ''), e.get('timing', ''))})"
+                   for e in intel.get("high", [])[:6]) or "• فعلاً اتفاق مهمی علامت‌گذاری نشده."
     wk = "\n".join(f"• {esc(k)}: {esc(v)}" for k, v in weekly.items()) or "• —"
-    tg_send(f"🤖 <b>Daily Market Analysis — {nowiso()[:10]}</b>\n" + body +
-            f"\n\n<b>📅 Week Ahead</b>\n{wk}\n\n<b>⏰ Events to Watch</b>\n{ev}"
-            f"\n\n<b>📰 Narrative</b>\n{esc(intel.get('digest', ''))}"
-            f"\n\n<i>Predictions are probabilistic with explicit invalidation conditions — "
-            f"never guarantees. Not financial advice.</i>")
+    tg_send(f"🤖 <b>گزارش روزانه بازار — {nowiso()[:10]}</b>\n"
+            f"⚡ خلاصه: {esc(ov)}\n" + body +
+            f"\n\n<b>📅 هفتهٔ پیشِ رو</b>\n{wk}"
+            f"\n\n<b>⏰ اتفاق‌های مهم پیشِ رو</b>\n{ev}"
+            f"\n\n<b>📖 خلاصهٔ خبرها</b>\n{esc(intel.get('digest', ''))}"
+            f"{LEGEND}")
     mark_sent(key)
 
 def send_prediction_change(p, reason):
     key = fp("pred", p["asset"], p["direction"], p["confidence"] // 10, round(p["net"], 1))
     if not should_send(key, 4): return
-    t = TITLES.get(p["asset"], p["asset"])
-    tg_send(f"🔁 <b>Prediction update — {t}</b>\n({esc(reason)})\n\n" + prediction_block(t, p))
+    tg_send(f"🔁 <b>نظر ربات عوض شد — {TITLES.get(p['asset'], p['asset'])}</b>\n"
+            f"({esc(reason)})\n\n" + prediction_block(p["asset"], p))
     mark_sent(key)
 
 def send_alert(text, kind="alert", cooldown_h=1):
     key = fp(kind, text[:120])
     if not should_send(key, cooldown_h): return
-    tg_send("🚨 <b>ALERT</b>\n" + text)
+    tg_send("🚨 <b>هشدار</b>\n" + text)
     mark_sent(key)
 
 # ======================================================================
-# 18. STATE / HISTORY PERSISTENCE
+# 18. STATE / HISTORY
 # ======================================================================
 HIST_COLS = ["date", "xauusd", "btc_usd", "dxy", "us10y", "oil", "usdirr_free",
              "usdt_irt", "geram18_rial", "emami_rial", "btc_irt",
@@ -941,7 +1015,6 @@ def full():
     intel, reused = get_intel(items, st)
     print(f"[intel] {'reused cache' if reused else 'fresh LLM analysis'}; news items={len(items)}")
 
-    # ---- deterministic analysis ----
     signals = {"XAUUSD": [], "GOLD_IR": [], "BTC": []}
     tech = {}
     for a in ("XAUUSD", "BTC"):
@@ -968,14 +1041,15 @@ def full():
         s = intel["scores"].get(k, 0)
         if abs(s) > 0.1:
             signals[asset].append(sig("ai_events", asset, s, 0.8,
-                                      "AI reading of the latest news flow points net in this direction."))
+                                      "بررسی هوشمندانهٔ اخبار مهم نشان می‌دهد فضای خبری الان "
+                                      "به نفع این بازار است." if s > 0 else
+                                      "بررسی هوشمندانهٔ اخبار مهم نشان می‌دهد فضای خبری الان "
+                                      "علیه این بازار است."))
 
-    # ---- Iran-specific chains ----
     signals["GOLD_IR"] += iran_gold_signals(ir, rows, intel["scores"].get("usdirr", 0))
     bps = btc_ir_signal(ir.get("btc_ir_premium_pct"))
     if bps: signals["BTC"].append(bps)
 
-    # ---- grade old predictions first, then build new ones ----
     prices_now = {"XAUUSD": xau, "BTC": g["BTC"].get("price"), "GOLD_IR": ir.get("geram18_rial")}
     grade_and_adapt(prices_now)
 
@@ -995,34 +1069,32 @@ def full():
         preds[a] = p
         print(f"[pred] {a}: {p['direction'].upper()}  conf={p['confidence']}%  net={p['net']}  risk={p['risk']}")
 
-    # ---- alerts: prediction changes & invalidations ----
+    plain = gemini_plain(preds)
+
     for a, p in preds.items():
         o = st.get("preds", {}).get(a)
         if o and (o["direction"] != p["direction"] or abs(o["confidence"] - p["confidence"]) >= 15):
-            why = ("direction changed" if o["direction"] != p["direction"]
-                   else f"confidence {o['confidence']}% → {p['confidence']}%")
+            why = ("جهتِ پیش‌بینی عوض شد" if o["direction"] != p["direction"]
+                   else f"احتمال از {fa(o['confidence'])}٪ به {fa(p['confidence'])}٪ رسید")
             send_prediction_change(p, why)
     for a, p in preds.items():
         px = prices_now.get(a)
         for lvl in p["invalidation_levels"]:
             if px and ((p["direction"] == "bullish" and px < lvl) or
                        (p["direction"] == "bearish" and px > lvl)):
-                send_alert(f"<b>{TITLES.get(a, a)}</b> prediction invalidated — "
-                           f"price {fmt(px)} crossed {fmt(lvl)}.", kind="invalid", cooldown_h=6)
+                send_alert(f"<b>{TITLES.get(a, a)}</b>: سطح هشدار {fmt(lvl)} شکست "
+                           f"(قیمت {fmt(px)}) — تحلیل قبلی باطل است.",
+                           kind="invalid", cooldown_h=6)
 
-    # ---- weekly view + daily report ----
     weekly = {}
-    for a, label, mods in (("XAUUSD", "Global gold", ("macro", "ai_events")),
-                           ("BTC", "Bitcoin", ("macro", "ai_events", "sentiment")),
-                           ("GOLD_IR", "Iranian gold", ("iran_local", "ai_events"))):
-        w = [s for s in signals[a] if s["horizon"] == "weekly" or s["module"] in mods]
+    for a, label in (("XAUUSD", "طلای جهانی"), ("BTC", "بیت‌کوین"), ("GOLD_IR", "طلای ایران")):
+        w = [s for s in signals[a] if s["horizon"] == "weekly" or s["module"] in ("macro", "ai_events")]
         if w:
             net, _ = fuse(w)
-            weekly[label] = ("Higher bias" if net > 0.1 else "Lower bias" if net < -0.1 else "Mixed") \
-                            + f" (score {net:+.2f})"
-    send_daily_report(preds, intel, weekly)
+            weekly[label] = ("تمایل به بالا رفتن" if net > 0.1 else
+                             "تمایل به پایین آمدن" if net < -0.1 else "نامشخص / در یک محدوده")
+    send_daily_report(preds, intel, weekly, plain)
 
-    # ---- persist state & history, set adaptive schedule ----
     st.update({"preds": preds, "digest": intel.get("digest", ""),
                "intel": {k: intel.get(k) for k in ("scores", "digest", "changed", "high",
                                                    "invalidations", "ids_hash", "fetched", "ok")},
@@ -1041,7 +1113,6 @@ def full():
     write_policy(prev_snap, g, ir, intel)
     return preds
 
-# ---- adaptive execution frequency ----
 def write_policy(prev_snap, g, ir, intel):
     shock = any(base and cur and abs(cur / base - 1) > thr for _, base, cur, thr in (
         ("XAUUSD", prev_snap.get("xauusd"), g.get("XAUUSD", {}).get("price"), CFG["SHOCK"]["XAUUSD"]),
@@ -1059,7 +1130,6 @@ def write_policy(prev_snap, g, ir, intel):
                     "decided": nowiso()})
     print(f"[policy] mode={mode}, next full analysis in ~{every} min")
 
-# ---- cheap watchdog ----
 HOT_KEYWORDS = ("sanction", "strike", "attack", "war", "emergency", "rate decision", "cpi",
                 "inflation surprise", "default", "devaluation", "intervention",
                 "nuclear", "ceasefire")
@@ -1071,10 +1141,10 @@ def quick():
         return full()
     g, _ = global_snapshots()
     snap, alerts = st.get("snap", {}), []
-    for k, path in (("XAUUSD", "xauusd"), ("BTC", "btc")):
+    for k, path, name in (("XAUUSD", "xauusd", "طلای جهانی"), ("BTC", "btc", "بیت‌کوین")):
         base, cur = snap.get(path), g.get(k, {}).get("price")
         if base and cur and abs(cur / base - 1) > CFG["SHOCK"][k]:
-            alerts.append(f"<b>{k}</b> moved {(cur / base - 1) * 100:+.1f}% since last check "
+            alerts.append(f"<b>{name}</b> ناگهان {(cur / base - 1) * 100:+.1f}٪ جابه‌جا شد "
                           f"({fmt(base)} → {fmt(cur)}).")
     for a, p in st.get("preds", {}).items():
         px = {"XAUUSD": g.get("XAUUSD", {}).get("price"),
@@ -1082,23 +1152,23 @@ def quick():
         for lvl in p.get("invalidation_levels", []):
             if px and ((p["direction"] == "bullish" and px < lvl) or
                        (p["direction"] == "bearish" and px > lvl)):
-                alerts.append(f"<b>{TITLES.get(a, a)}</b>: invalidation level {fmt(lvl)} "
-                              f"crossed (price {fmt(px)}).")
-    try:  # cheap Iranian gold check
+                alerts.append(f"<b>{TITLES.get(a, a)}</b>: سطح هشدار {fmt(lvl)} شکست "
+                              f"(قیمت {fmt(px)}) — تحلیل قبلی باطل است.")
+    try:
         g18, p = tgju("geram18"), st["preds"].get("GOLD_IR")
         if p and g18:
             for lvl in p.get("invalidation_levels", []):
                 if (p["direction"] == "bullish" and g18 < lvl) or \
                    (p["direction"] == "bearish" and g18 > lvl):
-                    alerts.append(f"<b>🥇 GOLD — IRAN</b>: invalidation level {fmt(lvl)} "
-                                  f"crossed (18k gram {fmt(g18)} rial).")
+                    alerts.append(f"<b>🥇 طلا در ایران</b>: سطح هشدار {fmt(lvl)} شکست "
+                                  f"(۱۸ عیار {fmt(g18)} ریال) — تحلیل قبلی باطل است.")
     except Exception:
         pass
     items = collect_news()
     seen = set(st.get("seen_news", []))
     for i in [i for i in items if i["id"] not in seen
               and any(k in i["title"].lower() for k in HOT_KEYWORDS)][:3]:
-        alerts.append("Possible market-moving news: " + esc(i["title"]))
+        alerts.append("خبر مهم احتمالی: " + esc(i["title"]))
     if alerts:
         send_alert("\n".join("• " + a for a in alerts), kind="quick", cooldown_h=2)
     st["seen_news"] = ([i["id"] for i in items] + st.get("seen_news", []))[:400]
@@ -1119,8 +1189,7 @@ def auto():
     return quick()
 
 def test_notify():
-    ok = tg_send("✅ <b>GBC Analyst test</b> — Telegram pipeline works. "
-                 "Full analysis arrives at the next scheduled run.")
+    ok = tg_send("✅ <b>ربات GBC آنلاین است.</b>\nگزارش کامل تحلیل در اجرای بعدی برایت ارسال می‌شود.")
     print("telegram:", "sent" if ok else "muted or failed")
 
 # ======================================================================
