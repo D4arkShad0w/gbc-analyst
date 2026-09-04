@@ -1,0 +1,214 @@
+{
+  "preds": {
+    "GOLD_IR": {
+      "asset": "GOLD_IR",
+      "direction": "neutral",
+      "net": 0.074,
+      "confidence": 43,
+      "risk": "medium",
+      "horizon": "2-7d",
+      "reasons": [
+        "⚠️ لایهٔ هوش مصنوعی (اخبار) در این اجرا فعال نبود؛ تحلیل ناقص است.",
+        "حباب سکه فقط +5.0٪ است — سکه به قیمت طلای خودش نزدیک است (فضای رشد احساسی کم، ولی ریسک پایین‌تر).",
+        "طلای جهانی روند صعودی دارد و بخشی از آن به قیمت داخل منتقل می‌شود.",
+        "دلار آزاد 2,202,600 ریال است و تقریباً ثابت مانده — موتور اصلی حرکت طلای داخل فعلاً خاموش است.",
+        "طلای داخل حدود 4.8٪ ارزان‌تر از ارزش واقعی‌اش است (ارزش واقعی از اسپات جهانی محاسبه شد، نه فیوچرز)."
+      ],
+      "buy_zones": [],
+      "sell_zones": [],
+      "entry_price": 228348000.0,
+      "created": "2026-09-04T11:28:01+00:00",
+      "valid_until": "2026-09-09T11:28:01+00:00",
+      "invalidations": [],
+      "invalidation_levels": [],
+      "modules": [
+        "iran_local"
+      ]
+    },
+    "XAUUSD": {
+      "asset": "XAUUSD",
+      "direction": "neutral",
+      "net": 0.092,
+      "confidence": 43,
+      "risk": "medium",
+      "horizon": "2-7d",
+      "reasons": [
+        "⚠️ لایهٔ هوش مصنوعی (اخبار) در این اجرا فعال نبود؛ تحلیل ناقص است.",
+        "قیمت (4,514.60) بالای میانگین‌های قیمتی‌اش نشسته؛ روند کلی رو به بالا است.",
+        "نیروی فروش بیشتر از خرید است ولی دارد کم‌رنگ می‌شود.",
+        "فشار خرید و فروش نسبتاً متعادل است.",
+        "الگوی سقف و کف: سقف‌ها و کف‌ها هر بار بالاتر از قبل ساخته می‌شوند ← روند صعودی. آخرین حرکت ۱.۹ برابرِ میانگین روزهای قبل بوده (قدرتمند).",
+        "در بازهٔ هفتگی هم الگو همین است: سقف‌ها و کف‌ها هر بار پایین‌تر از قبل ساخته می‌شوند ← روند نزولی (حرکت ۲.۴ برابر میانگین — قدرتمند)."
+      ],
+      "buy_zones": [
+        "4,431.66 – 4,458.33",
+        "4,500.11 – 4,527.19"
+      ],
+      "sell_zones": [
+        "4,560.33 – 4,587.77",
+        "4,673.39 – 4,701.51"
+      ],
+      "entry_price": 4514.60009765625,
+      "created": "2026-09-04T11:28:01+00:00",
+      "valid_until": "2026-09-09T11:28:01+00:00",
+      "invalidations": [],
+      "invalidation_levels": [],
+      "modules": [
+        "nds",
+        "nds_w",
+        "sentiment",
+        "technical"
+      ]
+    },
+    "BTC": {
+      "asset": "BTC",
+      "direction": "bullish",
+      "net": 0.534,
+      "confidence": 65,
+      "risk": "low",
+      "horizon": "2-7d",
+      "reasons": [
+        "⚠️ لایهٔ هوش مصنوعی (اخبار) در این اجرا فعال نبود؛ تحلیل ناقص است.",
+        "قیمت (36.16) بالای میانگین‌های قیمتی‌اش نشسته؛ روند کلی رو به بالا است.",
+        "نیروی خرید بیشتر از فروش است و هنوز قوی‌تر می‌شود.",
+        "الگوی سقف و کف: سقف‌ها و کف‌ها هر بار بالاتر از قبل ساخته می‌شوند ← روند صعودی. آخرین حرکت ۰.۴ برابرِ میانگین روزهای قبل بوده (ضعیف).",
+        "شاخص ترس و طمع = ۷۴ از ۱۰۰ (طمع — جمعیت خریدار است).",
+        "قیمت چند روز است خیلی تند بالا رفته؛ احتمال توقف یا اصلاح کوتاه وجود دارد."
+      ],
+      "buy_zones": [
+        "35.06 – 35.28",
+        "36.01 – 36.23"
+      ],
+      "sell_zones": [
+        "37.24 – 37.46"
+      ],
+      "entry_price": 36.15999984741211,
+      "created": "2026-09-04T11:28:01+00:00",
+      "valid_until": "2026-09-09T11:28:01+00:00",
+      "invalidations": [
+        "اگر قیمت یک روزِ کامل پایین‌تر از 36.12 بسته شود، این تحلیل غلط است."
+      ],
+      "invalidation_levels": [
+        36.11799926757813
+      ],
+      "modules": [
+        "nds",
+        "nds_w",
+        "sentiment",
+        "technical"
+      ]
+    }
+  },
+  "digest": "(تحلیل هوش مصنوعی در این اجرا در دسترس نبود.)",
+  "intel": {
+    "scores": {
+      "gold": 0,
+      "bitcoin": 0,
+      "usdirr": 0
+    },
+    "digest": "(تحلیل هوش مصنوعی در این اجرا در دسترس نبود.)",
+    "changed": false,
+    "high": [],
+    "invalidations": {},
+    "ids_hash": "6c26cfbc78c75eeb81341c07805dd358",
+    "fetched": "2026-09-04T11:28:00+00:00",
+    "ok": false
+  },
+  "updated": "2026-09-04T11:28:02+00:00",
+  "diag": {
+    "run_id": "20260904-112727",
+    "steps": {
+      "داده‌های بازار جهانی": {
+        "ok": true,
+        "sec": 2.1
+      },
+      "داده‌های بازار ایران": {
+        "ok": true,
+        "sec": 12.3
+      },
+      "مکرو (FRED)": {
+        "ok": true,
+        "sec": 0.4
+      },
+      "جمع‌آوری اخبار": {
+        "ok": true,
+        "sec": 18.6
+      },
+      "تحلیل خبری Gemini": {
+        "ok": true,
+        "sec": 0.0
+      },
+      "تحلیل تکنیکال و ساختار": {
+        "ok": true,
+        "sec": 0.3
+      },
+      "مدل‌های ایران": {
+        "ok": true,
+        "sec": 0.0
+      },
+      "ساخت پیش‌بینی‌ها": {
+        "ok": true,
+        "sec": 0.0
+      },
+      "خلاصهٔ سادهٔ Gemini": {
+        "ok": true,
+        "sec": 0.0
+      },
+      "ارسال گزارش تلگرام": {
+        "ok": true,
+        "sec": 1.3
+      }
+    },
+    "sources": {
+      "yfinance": {
+        "ok": 2,
+        "fail": 5,
+        "last_err": "VIX: VIX: empty"
+      },
+      "tgju": {
+        "ok": 6,
+        "fail": 0,
+        "last_err": null
+      },
+      "nobitex": {
+        "ok": 0,
+        "fail": 1,
+        "last_err": "HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError(\"HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex"
+      },
+      "fred": {
+        "ok": 0,
+        "fail": 4,
+        "last_err": "m2: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=M2SL&api_key=7fcbe80d75f6bd2891c0f4dbb27fe257+&file_type=json&sort_order=desc&limit=30"
+      },
+      "gdelt": {
+        "ok": 0,
+        "fail": 1,
+        "last_err": "429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h"
+      },
+      "fear_greed": {
+        "ok": 1,
+        "fail": 0,
+        "last_err": null
+      },
+      "telegram": {
+        "ok": 1,
+        "fail": 0,
+        "last_err": null
+      }
+    },
+    "llm": {
+      "ok": false,
+      "err": "no key/models"
+    },
+    "counts": {
+      "warn": 19,
+      "err": 0
+    }
+  },
+  "snap": {
+    "xauusd": 4514.60009765625,
+    "btc": 36.15999984741211,
+    "usdirr": 2202600.0,
+    "geram18": 228348000.0
+  }
+}
