@@ -1,0 +1,43 @@
+name: market-analyst
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # watchdog every 30 min (UTC); full runs governed by state/schedule.json
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force full analysis"
+        type: boolean
+        default: false
+
+concurrency:
+  group: analyst
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Run analyst
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODELS: ${{ secrets.GEMINI_MODELS }}
+          CRYPTOPANIC_TOKEN: ${{ secrets.CRYPTOPANIC_TOKEN }}
+        run: python gbc_analyst.py ${{ github.event.inputs.force == 'true' && '--full' || '--auto' }}
+
+      - name: Persist state (commit back)
+        run: |
+          git config user.name  "gbc-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add state/
+          git diff --cached --quiet || (git commit -m "state: auto update [skip ci]" && git push)
