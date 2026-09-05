@@ -1,96 +1,100 @@
-17:51:53.303 INFO  ════ RUN 20260905-175153 mode=--auto ════
-17:51:54.079 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
-17:51:54.080 INFO  [data] XAUUSD = 4,429.80 (via GC=F, 1d -1.38%)
-17:51:54.175 DEBUG [yf] BTC <- BTC-USD: 731 rows, last=80,082.14
-17:51:54.176 INFO  [data] BTC = 80,082.14 (via BTC-USD, 1d +0.51%)
-17:51:54.268 DEBUG [yf] DXY <- DX-Y.NYB: 504 rows, last=99.16
-17:51:54.269 INFO  [data] DXY = 99.16 (via DX-Y.NYB, 1d +0.16%)
-17:51:54.366 DEBUG [yf] US10Y <- ^TNX: 503 rows, last=0.48
-17:51:54.367 INFO  [data] US10Y = 0.48 (via ^TNX, 1d +0.46%)
-17:51:54.456 DEBUG [yf] OIL <- CL=F: 504 rows, last=91.48
-17:51:54.456 INFO  [data] OIL = 91.48 (via CL=F, 1d +0.20%)
-17:51:54.591 DEBUG [yf] SPX <- ^GSPC: 502 rows, last=7,718.60
-17:51:54.591 INFO  [data] SPX = 7,718.60 (via ^GSPC, 1d -0.38%)
-17:51:54.677 DEBUG [yf] VIX <- ^VIX: 504 rows, last=14.53
-17:51:54.678 INFO  [data] VIX = 14.53 (via ^VIX, 1d +1.47%)
-17:52:16.538 WARNING [source:gdelt] FAILED: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
-17:52:16.539 INFO  [news] collected=94 (empty-queries=0)
-17:52:17.009 INFO  [quick] full analysis due -> running
-17:52:17.009 INFO  ▶ FULL ANALYSIS — شروع
-17:52:17.010 INFO  ▶ داده‌های بازار جهانی — شروع
-17:52:17.491 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
-17:52:17.491 INFO  [data] XAUUSD = 4,429.80 (via GC=F, 1d -1.38%)
-17:52:17.553 DEBUG [yf] BTC <- BTC-USD: 731 rows, last=80,082.14
-17:52:17.554 INFO  [data] BTC = 80,082.14 (via BTC-USD, 1d +0.51%)
-17:52:17.612 DEBUG [yf] DXY <- DX-Y.NYB: 504 rows, last=99.16
-17:52:17.612 INFO  [data] DXY = 99.16 (via DX-Y.NYB, 1d +0.16%)
-17:52:17.702 DEBUG [yf] US10Y <- ^TNX: 503 rows, last=0.48
-17:52:17.702 INFO  [data] US10Y = 0.48 (via ^TNX, 1d +0.46%)
-17:52:17.769 DEBUG [yf] OIL <- CL=F: 504 rows, last=91.48
-17:52:17.769 INFO  [data] OIL = 91.48 (via CL=F, 1d +0.20%)
-17:52:17.832 DEBUG [yf] SPX <- ^GSPC: 502 rows, last=7,718.60
-17:52:17.832 INFO  [data] SPX = 7,718.60 (via ^GSPC, 1d -0.38%)
-17:52:17.888 DEBUG [yf] VIX <- ^VIX: 504 rows, last=14.53
-17:52:17.888 INFO  [data] VIX = 14.53 (via ^VIX, 1d +1.47%)
-17:52:17.888 INFO  ✔ داده‌های بازار جهانی — OK (0.9s)
-17:52:17.888 INFO  ▶ داده‌های بازار ایران — شروع
-17:52:23.452 INFO  [data] tgju ok=6/6 dollar=2202600.0 g18=228348000.0 sekee=2339800000.0
-17:52:23.723 DEBUG [retry:nobitex] attempt 1/2 failed: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
-17:52:25.089 DEBUG [retry:nobitex] attempt 2/2 failed: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
-17:52:27.089 WARNING [source:nobitex] FAILED: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
-17:52:28.288 DEBUG [retry:wallex] attempt 1/2 failed: USDTTM not found in wallex response
-17:52:30.499 DEBUG [retry:wallex] attempt 2/2 failed: USDTTM not found in wallex response
-17:52:32.499 WARNING [source:wallex] FAILED: USDTTM not found in wallex response
-17:52:32.664 INFO  [data] premium18=-2.9433100132220003 bubble_sekee=4.9860767588842725 usdt_prem=None spot=main-chain crypto=None
-17:52:32.664 INFO  ✔ داده‌های بازار ایران — OK (14.8s)
-17:52:32.664 INFO  [sanity] all key prices look reasonable ✔
-17:52:32.664 INFO  ▶ مکرو (FRED) — شروع
-17:52:33.101 INFO  [data] fred 10y=4.77% real=2.4199999999999995
-17:52:33.810 INFO  ✔ مکرو (FRED) — OK (1.1s)
-17:52:33.810 INFO  ▶ جمع‌آوری اخبار — شروع
-17:52:45.206 WARNING [source:gdelt] FAILED: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
-17:52:45.207 INFO  [news] collected=94 (empty-queries=0)
-17:52:45.207 INFO  ✔ جمع‌آوری اخبار — OK (11.4s)
-17:52:45.207 INFO  ▶ تحلیل خبری Gemini — شروع
-17:52:45.207 DEBUG [gemini] prompt headlines=45 chars=4596
-17:52:48.993 INFO  [gemini] OK model=gemini-3.1-flash-lite out=1776 chars (3786ms)
-17:52:48.995 INFO  [gemini] news scores gold=-0.20 btc=-1.00 usdirr=+1.00 high_events=2
-17:52:48.995 INFO  [intel] fresh; ok=True changed=True
-17:52:48.995 INFO  ✔ تحلیل خبری Gemini — OK (3.8s)
-17:52:48.995 INFO  ▶ تحلیل تکنیکال و ساختار — شروع
-17:52:49.158 INFO  [tech] XAUUSD close=4,429.80 rsi=52.3 bb%b=0.41 atr_pctile=68 sup=[4214.2, 4300.0, 4395.5] res=[4512.7, 4574.0, 4687.4]
-17:52:49.382 INFO  [tech] BTC close=80,082.14 rsi=67.3 bb%b=0.69 atr_pctile=38 sup=[65859.0, 70038.2, 74994.5] res=[81519.0, 92017.7, 99083.6]
-17:52:49.382 INFO  ✔ تحلیل تکنیکال و ساختار — OK (0.4s)
-17:52:49.631 INFO  ▶ مدل‌های ایران — شروع
-17:52:49.631 DEBUG [iran] signals=5 mom=+0.00% bubble=4.9860767588842725
-17:52:49.631 INFO  [signals] counts: XAUUSD=11 GOLD_IR=5 BTC=12
-17:52:49.632 INFO  ✔ مدل‌های ایران — OK (0.0s)
-17:52:49.632 INFO  ▶ ساخت پیش‌بینی‌ها — شروع
-17:52:49.633 INFO  [pred] GOLD_IR: BULLISH conf=59% (cap=92) net=+0.368 agree=1.00 risk=high signals=5
-17:52:49.633 INFO  [pred] XAUUSD: BULLISH conf=45% (cap=92) net=+0.140 agree=0.65 risk=high signals=11
-17:52:49.633 INFO  [pred] BTC: BULLISH conf=47% (cap=92) net=+0.170 agree=0.64 risk=medium signals=12
-17:52:49.633 INFO  ✔ ساخت پیش‌بینی‌ها — OK (0.0s)
-17:52:49.633 INFO  ▶ خلاصهٔ سادهٔ Gemini — شروع
-17:52:50.706 INFO  [gemini] OK model=gemini-3.1-flash-lite out=294 chars (1073ms)
-17:52:50.707 INFO  ✔ خلاصهٔ سادهٔ Gemini — OK (1.1s)
-17:52:51.722 INFO  ▶ ارسال گزارش تلگرام — شروع
-17:52:51.722 INFO  ✔ ارسال گزارش تلگرام — OK (0.0s)
-17:52:51.723 INFO  [state] history now 2 rows
-17:52:51.941 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
-17:52:52.009 INFO  [policy] mode=critical -> next full in ~60 min (shock=False vol_hot=True breaking=True)
-17:52:52.009 INFO  ════ SUMMARY ════
-17:52:52.009 INFO    GOLD_IR: BULLISH conf=59% risk=high
-17:52:52.009 INFO    XAUUSD: BULLISH conf=45% risk=high
-17:52:52.009 INFO    BTC: BULLISH conf=47% risk=medium
-17:52:52.009 INFO    src yfinance: ok=15 fail=0 last_err=None
-17:52:52.010 INFO    src gdelt: ok=0 fail=2 last_err=429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
-17:52:52.010 INFO    src telegram: ok=3 fail=0 last_err=None
-17:52:52.010 INFO    src tgju: ok=6 fail=0 last_err=None
-17:52:52.010 INFO    src nobitex: ok=0 fail=1 last_err=HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex
-17:52:52.010 INFO    src wallex: ok=0 fail=1 last_err=USDTTM not found in wallex response
-17:52:52.010 INFO    src fred: ok=4 fail=0 last_err=None
-17:52:52.010 INFO    src fear_greed: ok=1 fail=0 last_err=None
-17:52:52.010 INFO    llm: {'ok': True, 'model': 'gemini-3.1-flash-lite', 'ms': 1073, 'out_len': 294}
-17:52:52.010 INFO    warns=4 errors=0
-17:52:52.010 INFO  ✔ FULL ANALYSIS — OK (35.0s)
-17:52:52.010 INFO  ════ END 20260905-175153 warns=4 errors=0 ════
+19:49:47.838 INFO  ════ RUN 20260905-194947 mode=--auto ════
+19:49:49.209 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
+19:49:49.210 INFO  [data] XAUUSD = 4,429.80 (via GC=F, 1d -1.38%)
+19:49:49.423 DEBUG [yf] BTC <- BTC-USD: 731 rows, last=79,734.38
+19:49:49.424 INFO  [data] BTC = 79,734.38 (via BTC-USD, 1d +0.08%)
+19:49:49.601 DEBUG [yf] DXY <- DX-Y.NYB: 504 rows, last=99.16
+19:49:49.601 INFO  [data] DXY = 99.16 (via DX-Y.NYB, 1d +0.16%)
+19:49:49.783 DEBUG [yf] US10Y <- ^TNX: 503 rows, last=0.48
+19:49:49.784 INFO  [data] US10Y = 0.48 (via ^TNX, 1d +0.46%)
+19:49:49.991 DEBUG [yf] OIL <- CL=F: 504 rows, last=91.48
+19:49:49.992 INFO  [data] OIL = 91.48 (via CL=F, 1d +0.20%)
+19:49:50.196 DEBUG [yf] SPX <- ^GSPC: 502 rows, last=7,718.60
+19:49:50.196 INFO  [data] SPX = 7,718.60 (via ^GSPC, 1d -0.38%)
+19:49:50.372 DEBUG [yf] VIX <- ^VIX: 504 rows, last=14.53
+19:49:50.372 INFO  [data] VIX = 14.53 (via ^VIX, 1d +1.47%)
+19:50:12.577 WARNING [source:gdelt] FAILED: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
+19:50:12.578 INFO  [news] collected=94 (empty-queries=0)
+19:50:13.048 INFO  [quick] full analysis due -> running
+19:50:13.048 INFO  ▶ FULL ANALYSIS — شروع
+19:50:13.048 INFO  ▶ داده‌های بازار جهانی — شروع
+19:50:13.771 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
+19:50:13.772 INFO  [data] XAUUSD = 4,429.80 (via GC=F, 1d -1.38%)
+19:50:13.924 DEBUG [yf] BTC <- BTC-USD: 731 rows, last=79,715.71
+19:50:13.925 INFO  [data] BTC = 79,715.71 (via BTC-USD, 1d +0.05%)
+19:50:14.123 DEBUG [yf] DXY <- DX-Y.NYB: 504 rows, last=99.16
+19:50:14.124 INFO  [data] DXY = 99.16 (via DX-Y.NYB, 1d +0.16%)
+19:50:14.235 DEBUG [yf] US10Y <- ^TNX: 503 rows, last=0.48
+19:50:14.235 INFO  [data] US10Y = 0.48 (via ^TNX, 1d +0.46%)
+19:50:14.382 DEBUG [yf] OIL <- CL=F: 504 rows, last=91.48
+19:50:14.382 INFO  [data] OIL = 91.48 (via CL=F, 1d +0.20%)
+19:50:14.510 DEBUG [yf] SPX <- ^GSPC: 502 rows, last=7,718.60
+19:50:14.511 INFO  [data] SPX = 7,718.60 (via ^GSPC, 1d -0.38%)
+19:50:14.622 DEBUG [yf] VIX <- ^VIX: 504 rows, last=14.53
+19:50:14.623 INFO  [data] VIX = 14.53 (via ^VIX, 1d +1.47%)
+19:50:14.623 INFO  ✔ داده‌های بازار جهانی — OK (1.6s)
+19:50:14.623 INFO  ▶ داده‌های بازار ایران — شروع
+19:50:23.668 INFO  [data] tgju ok=6/6 dollar=2202600.0 g18=228348000.0 sekee=2339800000.0
+19:50:24.208 DEBUG [retry:nobitex] attempt 1/2 failed: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
+19:50:25.675 DEBUG [retry:nobitex] attempt 2/2 failed: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
+19:50:27.676 WARNING [source:nobitex] FAILED: HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex.ir' ([Errno -2] Name or service not known)"))
+19:50:29.250 DEBUG [retry:wallex] attempt 1/2 failed: USDTTM not found in wallex response
+19:50:31.572 DEBUG [retry:wallex] attempt 2/2 failed: USDTTM not found in wallex response
+19:50:33.572 WARNING [source:wallex] FAILED: USDTTM not found in wallex response
+19:50:33.935 INFO  [data] premium18=-2.9433100132220003 bubble_sekee=4.9860767588842725 usdt_prem=None spot=main-chain crypto=None
+19:50:33.935 INFO  ✔ داده‌های بازار ایران — OK (19.3s)
+19:50:33.935 INFO  [sanity] all key prices look reasonable ✔
+19:50:33.935 INFO  ▶ مکرو (FRED) — شروع
+19:50:34.549 INFO  [data] fred 10y=4.77% real=2.4199999999999995
+19:50:35.637 INFO  ✔ مکرو (FRED) — OK (1.7s)
+19:50:35.637 INFO  ▶ جمع‌آوری اخبار — شروع
+19:50:49.568 WARNING [source:gdelt] FAILED: 429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
+19:50:49.569 INFO  [news] collected=94 (empty-queries=0)
+19:50:49.569 INFO  ✔ جمع‌آوری اخبار — OK (13.9s)
+19:50:49.569 INFO  ▶ تحلیل خبری Gemini — شروع
+19:50:49.569 DEBUG [gemini] prompt headlines=45 chars=4727
+19:51:23.043 WARNING [gemini] gemini-3.1-flash-lite: HTTP 503 -> rotating
+19:51:23.203 WARNING [gemini] gemini-2.5-flash-lite: HTTP 404 -> rotating
+19:51:23.359 WARNING [gemini] gemini-2.5-flash: HTTP 404 -> rotating
+19:51:23.485 WARNING [gemini] gemini-2.0-flash: HTTP 404 -> rotating
+19:51:26.199 INFO  [gemini] OK model=gemini-3.5-flash-lite out=1931 chars (2714ms)
+19:51:26.200 INFO  [gemini] news scores gold=-0.39 btc=-0.19 usdirr=+0.85 high_events=1
+19:51:26.200 INFO  [intel] fresh; ok=True changed=False
+19:51:26.200 INFO  ✔ تحلیل خبری Gemini — OK (36.6s)
+19:51:26.200 INFO  ▶ تحلیل تکنیکال و ساختار — شروع
+19:51:26.277 INFO  [tech] XAUUSD close=4,429.80 rsi=52.3 bb%b=0.41 atr_pctile=68 sup=[4214.2, 4300.0, 4395.5] res=[4512.7, 4574.0, 4687.4]
+19:51:26.379 INFO  [tech] BTC close=79,715.71 rsi=66.6 bb%b=0.67 atr_pctile=38 sup=[65859.0, 70038.2, 74994.5] res=[81497.5, 92017.7, 99083.6]
+19:51:26.379 INFO  ✔ تحلیل تکنیکال و ساختار — OK (0.2s)
+19:51:26.652 INFO  ▶ مدل‌های ایران — شروع
+19:51:26.652 DEBUG [iran] signals=5 mom=+0.00% bubble=4.9860767588842725
+19:51:26.652 INFO  [signals] counts: XAUUSD=11 GOLD_IR=5 BTC=12
+19:51:26.652 INFO  ✔ مدل‌های ایران — OK (0.0s)
+19:51:26.653 INFO  ▶ ساخت پیش‌بینی‌ها — شروع
+19:51:26.653 INFO  [pred] GOLD_IR: BULLISH conf=56% (cap=92) net=+0.318 agree=1.00 risk=medium signals=5
+19:51:26.654 INFO  [pred] XAUUSD: NEUTRAL conf=44% (cap=92) net=+0.106 agree=0.61 risk=medium signals=11
+19:51:26.654 INFO  [pred] BTC: BULLISH conf=53% (cap=92) net=+0.302 agree=0.79 risk=low signals=12
+19:51:26.654 INFO  ✔ ساخت پیش‌بینی‌ها — OK (0.0s)
+19:51:26.654 INFO  ▶ خلاصهٔ سادهٔ Gemini — شروع
+19:51:29.440 INFO  [gemini] OK model=gemini-3.5-flash-lite out=373 chars (2786ms)
+19:51:29.441 INFO  ✔ خلاصهٔ سادهٔ Gemini — OK (2.8s)
+19:51:30.372 INFO  ▶ ارسال گزارش تلگرام — شروع
+19:51:30.372 INFO  ✔ ارسال گزارش تلگرام — OK (0.0s)
+19:51:30.373 INFO  [state] history now 2 rows
+19:51:30.841 DEBUG [yf] XAUUSD <- GC=F: 504 rows, last=4,429.80
+19:51:30.872 INFO  [policy] mode=elevated -> next full in ~120 min (shock=False vol_hot=True breaking=False)
+19:51:30.872 INFO  ════ SUMMARY ════
+19:51:30.872 INFO    GOLD_IR: BULLISH conf=56% risk=medium
+19:51:30.872 INFO    XAUUSD: NEUTRAL conf=44% risk=medium
+19:51:30.872 INFO    BTC: BULLISH conf=53% risk=low
+19:51:30.872 INFO    src yfinance: ok=15 fail=0 last_err=None
+19:51:30.872 INFO    src gdelt: ok=0 fail=2 last_err=429 Client Error: Too Many Requests for url: https://api.gdeltproject.org/api/v2/doc/doc?query=%28gold%20OR%20bitcoin%20OR%20sanctions%20OR%20iran%20OR%20FOMC%29%20market%20sourcelang%3Aenglish&mode=artlist&maxrecords=25&format=json&timespan=24h
+19:51:30.872 INFO    src telegram: ok=2 fail=0 last_err=None
+19:51:30.872 INFO    src tgju: ok=6 fail=0 last_err=None
+19:51:30.872 INFO    src nobitex: ok=0 fail=1 last_err=HTTPSConnectionPool(host='api.nobitex.ir', port=443): Max retries exceeded with url: /market/stats?srcCurrency=usdt%2Cbtc&dstCurrency=irt (Caused by NameResolutionError("HTTPSConnection(host='api.nobitex.ir', port=443): Failed to resolve 'api.nobitex
+19:51:30.872 INFO    src wallex: ok=0 fail=1 last_err=USDTTM not found in wallex response
+19:51:30.872 INFO    src fred: ok=4 fail=0 last_err=None
+19:51:30.872 INFO    src fear_greed: ok=1 fail=0 last_err=None
+19:51:30.872 INFO    llm: {'ok': True, 'model': 'gemini-3.5-flash-lite', 'ms': 2786, 'out_len': 373}
+19:51:30.872 INFO    warns=8 errors=0
+19:51:30.872 INFO  ✔ FULL ANALYSIS — OK (77.8s)
+19:51:30.872 INFO  ════ END 20260905-194947 warns=8 errors=0 ════
