@@ -1,13 +1,13 @@
 name: market-analyst
 on:
-  schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch:
-    inputs:
-      force:
-        description: "Force full analysis"
-        type: boolean
-        default: false
+#  schedule:
+#    - cron: "*/30 * * * *"
+#  workflow_dispatch:
+#inputs:
+  #    force:
+   ##     description: "Force full analysis"
+  #      type: boolean
+  #      default: false
 
 concurrency:
   group: analyst
